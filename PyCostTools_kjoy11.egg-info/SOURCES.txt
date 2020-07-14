@@ -3,8 +3,10 @@ setup.py
 PyCostTools_kjoy11.egg-info/PKG-INFO
 PyCostTools_kjoy11.egg-info/SOURCES.txt
 PyCostTools_kjoy11.egg-info/dependency_links.txt
+PyCostTools_kjoy11.egg-info/requires.txt
 PyCostTools_kjoy11.egg-info/top_level.txt
 pycost/__init__.py
 pycost/inflation.py
+pycost/learn.py
 pycost/utils.py
 pycost/data/inflation.csv
