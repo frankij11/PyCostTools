@@ -3,6 +3,9 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open("requirements.txt", "r") as fh:
+    depends = fh.read()
+
 setuptools.setup(
     name="PyCostTools-kjoy11", # Replace with your own username
     version="0.0.1",
@@ -13,6 +16,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/frankij11/PyCostTools",
     packages=setuptools.find_packages(),
+    install_requires = depends,
     #include_package_data = True,
     package_data={"": ['data/*csv']},
     classifiers=[
