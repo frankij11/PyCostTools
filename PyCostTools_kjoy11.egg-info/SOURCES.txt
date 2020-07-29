@@ -9,4 +9,5 @@ pycost/__init__.py
 pycost/inflation.py
 pycost/learn.py
 pycost/utils.py
+pycost/data/JIC_PB21_2_6_2020_Final.xlsm
 pycost/data/inflation.csv

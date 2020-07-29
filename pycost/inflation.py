@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import os
 from .utils import *
@@ -65,8 +66,8 @@ def make_jic(fName=None):
     return jic
 
 def change_BY(BY=2020, jic=None):
-    if jic is None: return jic = make_jic()
-    by = jic[['ID','Year','Raw']).query("Year ==2020").rename(columns={"Raw":"BY_RAW"})
+    if jic is None: jic = make_jic()
+    by = jic[['ID','Year','Raw']].query("Year ==2020").rename(columns={"Raw":"BY_RAW"})
     new_jic = (
         pd.merge(jic, by[['ID','BY_RAW']], how='left', on='ID')
             .assign(Raw = new_jic.Raw / new_jic.BY_RAW, Weighted = new_jic.Raw / new_jic.BY_RAW * new_jic.ComboF)
