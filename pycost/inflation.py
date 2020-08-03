@@ -123,16 +123,16 @@ def inflation(Index, FromYR, ToYR, Cost, from_type="BY", to_type="BY", inflation
                      "Index", "ToYR"], right_on=["Indice", "Year"])
 
     if from_type == "BY":
-        div_by = df_from["Raw"]
+        div_by = df_from["Raw"].values
     else:
-        div_by = df_from["Weighted"]
+        div_by = df_from["Weighted"].values
 
     if to_type == "BY":
-        mult_by = df_to["Raw"]
+        mult_by = df_to["Raw"].values
     else:
-        mult_by = df_to["Weighted"]
+        mult_by = df_to["Weighted"].values
 
-    result = (df["Cost"] / div_by) * mult_by
+    result = (df["Cost"].values / div_by) * mult_by
     #result = result[[1]]
 
     return result
