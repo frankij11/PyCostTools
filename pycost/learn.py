@@ -5,12 +5,11 @@ import pandas as pd
 
 def lc_midpoint(f, l, LC=1):
     b = np.log(LC)
-    m =(f+l + 2 *(f+l)**.5)/4
-    if b != 0:
-        return m
+    if b == 0:
+        return (f+l + 2 *(f+l)**.5)/4
     else:
         print("Asher's not implemented")
-        return m
+        return (f+l + 2 *(f+l)**.5)/4
 
 def learn_curve(T1, LC, RC, Qty, Rate):
     return T1*Qty**(np.log(LC)/np.log(2)) * Rate ** (np.log(RC) / np.log(2))
