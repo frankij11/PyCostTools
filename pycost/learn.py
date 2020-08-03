@@ -23,7 +23,7 @@ def lc_prep(df, cols, val= "value"):
     lc =df.groupby(cols)[val].agg(share_qty = 'sum').reset_index()
     lc["Last"] = lc.groupby(cols[:-1])["share_qty"].cumsum()
     lc["First"] = lc["Last"] - lc["share_qty"] + 1
-    lc["midpoint"] = lc_midpoint(df["First"], df["Last"])
+    lc["midpoint"] = lc_midpoint(lc["First"], lc["Last"])
     
     lc = pd.merge(df,lc,how='left', on=cols,sort=False)
     return lc
