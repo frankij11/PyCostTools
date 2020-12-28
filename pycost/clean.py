@@ -2,6 +2,36 @@ import pandas as pd
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
+class CategoricalEncoder(BaseEstimator, TransformerMixin):
+    """String to numbers categorical encoder."""
+
+    def __init__(self, variables=None):
+        if not isinstance(variables, list):
+            self.variables = [variables]
+        else:
+            self.variables = variables
+
+    def fit(self, X, y):
+        temp = pd.concat([X, y], axis=1)
+        temp.columns = list(X.columns) + ['target']
+
+        # persist transforming dictionary
+        self.encoder_dict_ = {}
+
+        for var in self.variables:
+            t = temp.groupby([var])['target'].mean().sort_values(
+                ascending=True).index
+            self.encoder_dict_[var] = {k: i for i, k in enumerate(t, 0)}
+
+        return self
+
+    def transform(self, X):
+        # encode labels
+        X = X.copy()
+        for feature in self.variables:
+            X[feature] = X[feature].map(self.encoder_dict_[feature])
+        return X
+
 class CategoricalImputer(BaseEstimator, TransformerMixin):
     def __init__(self, variables=None):
     #Check if the variables passed are in a list format, if not convert 
