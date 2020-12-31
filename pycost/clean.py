@@ -55,13 +55,14 @@ class CategoricalImputer(BaseEstimator, TransformerMixin):
 
 class Clean(BaseEstimator, TransformerMixin):
     def __init__(self,n_cats_max=20, drop_cols=list()):
-        self.n_cats_max = cats_max
+        self.n_cats_max = n_cats_max
         if type(drop_cols) != list: drop_cols=[drop_cols]
         self.drop_cols = drop_cols
         
         
 
     def fit(self, X:pd.DataFrame, y:pd.Series=None):
+        self.columns = set(X.columns.tolist())
         df = pd.concat([X,y], axis=1)
         df.columns = list(X.columns) + ["y"]
         self.cat_vars = X.select_dtypes(include='object').columns.tolist()
@@ -70,23 +71,35 @@ class Clean(BaseEstimator, TransformerMixin):
         self.cats_ = dict()
         
         for var in self.cat_vars:
-            top_vals = X.groupby([var])["y"].sum().sort_values(
+            top_vals = df.groupby([var])["y"].sum().sort_values(
                 ascending=False).reset_index()
-            top_vals = top_vals.loc[range(0,min(n_cats_max+1, len(top_vals))),var].columns.tolist()     
+            top_vals = top_vals.loc[range(0,min(self.n_cats_max+1, len(top_vals))),var].unique().tolist() + ["Other"]     
             self.cats_[var] = top_vals
             
         return self
 
     def transform(self,X:pd.DataFrame):
         X = X.copy()
+        
+        # Drop columns not a part of original data set
+        extra_cols = set(X.columns.tolist()) - self.columns
+        X.drop(columns=extra_cols, inplace=True)
+        
         # Fill categorical values that are missing
         # Fill categorical values not in original dataset
         for feature in self.cat_vars:
             X[feature] = X[feature].fillna("Other")
-            new_cat = ~X[feature].isin(self.cats_[var].value)
+            new_cat = ~X[feature].isin(self.cats_[feature])
             X[feature][new_cat] = "Other"
 
-        X=pd.get_dummies(X)
+
+        # fix!!!
+        for var in self.cat_vars:
+            for cat in self.cats_[var]:
+                col_name = var +"_" + cat
+                X[col_name] = X[var] == cat
+            X.drop(columns=var, inplace=True)
+        
 
 
         # Clean Numerical Data
