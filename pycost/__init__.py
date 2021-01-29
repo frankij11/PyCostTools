@@ -6,4 +6,5 @@
 from .utils import *
 from .inflation import *
 from .learn import *
+from .analysis import *
 
