@@ -1,8 +1,12 @@
 # utils
+from datetime import datetime
+import os
 import timeit
+import joblib
 
 # Data Model
 import numpy as np
+from numpy.lib.function_base import select
 from numpy.lib.shape_base import _replace_zero_by_x_arrays
 import pandas as pd
 import param
@@ -175,7 +179,7 @@ class Model:
         self.df_raw = df
         self.formula = formula
         self.model_org = model
-        
+        self.ModelDate = datetime.now()
        
         # Test Train Split
         self.random_state=random_state
@@ -183,7 +187,7 @@ class Model:
         
         
         self.y, self.X = patsy.dmatrices(formula, df, return_type='dataframe')
-        if test_split >0 & test_split <1:
+        if (test_split >0.0) & (test_split <1.0):
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.y, test_size=self.test_split, random_state=self.random_state)
         else:
             self.X_train, self.X_test, self.y_train, self.y_test = (self.X, self.X, self.y, self.y)
@@ -214,10 +218,10 @@ class Model:
         if X is None: 
             X=self.X_train
         if y is None: 
-            y=self.y_train
+            y=self.y_train.values.ravel()
         start_time = timeit.default_timer() 
-        self.model.fit(self.X, self.y)
-        run_time = timeit.default_timer() - start_time
+        self.model.fit(X,y)
+        self.run_time = timeit.default_timer() - start_time
         return self.model
     
     def predict(self, df=pd.DataFrame(), X=None):
@@ -235,16 +239,18 @@ class Model:
 
         return self.model.predict(X)
 
-    def results(self):
+    def summary(self):
         y_pred=self.model.predict(X=self.X_test)
         y_act=self.y_test
         y_pred_train=self.model.predict(X=self.X_train)
         y_act_train=self.y_train
         
-        results = {
+        results = pd.DataFrame({
             'Model': [self.model['model']],
             'Formula':[self.formula],
             'RunTime':[self.run_time],
+            'ModelDate': [self.ModelDate],
+            'ReportDate': [datetime.now()],
             'RSQ': [metrics.r2_score(y_pred, y_act)],
             'MSE': [metrics.mean_squared_error(y_pred, y_act)],
             'AbsErr': [metrics.mean_absolute_error(y_pred, y_act)], 
@@ -252,6 +258,108 @@ class Model:
             'DF': [len(self.X_train) - len(self.feature_names) ],
             'MaxError': [metrics.max_error(y_pred,y_act)],
             'TrainRSQ':[metrics.r2_score(y_pred_train, y_act_train)]
-        }
+        })
+
+        
 
         return results
+
+    def save(self,name, remove_data=False, compress=3):
+        
+        if ".joblib" not in name:
+            name = name + ".joblib"
+        
+        obj = self
+        if remove_data:
+            del obj.X
+            del obj.y
+            del obj.df_raw
+            del obj.X_test
+            del obj.X_train
+            del obj.y_test
+            del obj.y_train
+        joblib.dump(obj, name, compress)
+        self.save_date = datetime.now()
+        print(f"{name} (Model Size): {np.round(os.path.getsize(name) / 1024 / 1024, 2) } MB")
+        pass
+
+    def report(self,show=True,**kwargs):
+        X = self.X
+        app = pn.template.BootstrapTemplate(title="Model Report")
+        pn.config.sizing_mode="stretch_width"
+        
+        
+        # Header
+        app.header.header_background ='blue'
+        #app.header.append(pn.pane.Markdown("# Report"))
+        # Side Bar
+        
+        #inputs = {f"{col}" : pnw.FloatSlider(name=col,start=X[col].min(), end=max(1,X[col].max()), value=X[col].median()) for col in X.columns}
+        #for input in inputs:
+        #    app.sidebar.append(inputs[input])
+        
+        
+        # Main
+        summary_df = self.summary().T
+        #summary_df.columns = summary_df.loc[0]
+        #summary_df = summary_df.loc[1:]
+        preds =pd.DataFrame({"Actual" : self.y.values.ravel(), "Predicted" : self.predict(X=self.X)})
+        act_vs_pred = preds.hvplot(x='Predicted', y='Actual',kind='scatter', title='Actual vs Predicted') * hv.Slope(1,0).opts(color='red')
+        summary = pn.Row(
+                pn.Card(summary_df, title='Summary Statistics', height=500),
+                pn.Card(act_vs_pred, title= "Actual Vs Predicted" , height=500)
+            )
+        pages = pn.Tabs(('Summary', summary), ('Feature Importance', pn.panel("in work")))
+        
+        app.main.append(pages)
+        if show:
+            server = app.show("KJ's Model Anlaysis report",threaded=True )
+            return (app, server)
+        else:
+            return app
+        
+
+class LC_Model:
+    def __init__(self):
+        pass
+
+class Models:
+    def __init__(self, df,formulas, by=[], models=[LinearRegression(),
+                     RandomForestRegressor(), 
+                     LassoCV(cv=5), 
+                     RidgeCV(cv=5), 
+                     ElasticNetCV(cv=5)],test_split=.2, random_state=42):
+        self.df_raw = df
+
+        if type(formulas) != list:
+             self.formulas = [formulas]
+        else:
+            self.formulas = formulas
+
+
+    def fit(self, X,y):
+        pass
+
+if __name__ == "__main__":
+    import pycost as ct
+    df = ct.jic
+    df['Year'] = pd.to_numeric( df['Year'], errors='coerce')
+    f = "Raw ~ Version+Service+tags+Indice +Year+Weighted"
+    model_types = dict(
+                     lm = LinearRegression(),
+                     rf=RandomForestRegressor(), 
+                     lasso=LassoCV(cv=5), 
+                     ridge=RidgeCV(cv=5), 
+                     enet = ElasticNetCV(cv=5))
+    mods = []
+    results = pd.DataFrame()
+    for mod in model_types:    
+        m=Model(ct.jic, f, model=model_types[mod])
+        m.fit()
+        print(m.feature_names)
+        print(m.summary().T)
+        mods.append(m)
+        results = pd.concat([results, m.summary()], ignore_index=True)
+    
+    print(results)
+    app,server = mods[0].report()
