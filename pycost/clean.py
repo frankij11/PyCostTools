@@ -1,6 +1,21 @@
 import pandas as pd
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
+import patsy
+
+
+class MakeFormula(BaseEstimator, TransformerMixin):
+    """String to numbers categorical encoder."""
+
+    def __init__(self,X=None,y=None, formula='', df=pd.DataFrame()):
+        self.formula = formula
+        self.y, self.X = patsy.dmatrices(formula, df,return_type='dataframe')
+
+    def fit(self, X, y):
+        return self
+
+    def transform(self, X):
+        return X
 
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
     """String to numbers categorical encoder."""
@@ -41,15 +56,21 @@ class CategoricalImputer(BaseEstimator, TransformerMixin):
             self.variables = [variables]
         else:
             self.variables = variables
+
+        self.features_unique =dict()
     
     def fit(self, X:pd.DataFrame,y:pd.Series=None):
         #Nothing to do here, just return the dataframe as is
+        # Find unique
+        for feature in self.variables:
+            self.features_unique[feature] = X[feature].unique()
         return self
     
     def transform(self, X:pd.DataFrame):
 	      #Fill missing values and return the modified dataframe
         X=X.copy()
         for feature in self.variables:
+
             X[feature] = X[feature].fillna("Missing")
         return X
 
