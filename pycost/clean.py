@@ -3,6 +3,102 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 import patsy
 
+def iferror(func,*args, **kwargs):
+    if "error" not in kwargs: 
+        error=None
+    else:
+        error = kwargs["error"]
+        kwargs.popitem('error')
+    try:
+        results = func(*args)
+    except:
+        results = error
+
+    return results
+
+class DateTransform(BaseEstimator, TransformerMixin):
+    """Date to numeric columns."""
+
+    def __init__(self,date_columns=[],drop=True, cont_year=True,year=True,month=True,day=False,weekday=False,**kwargs):
+        self.date_columns =date_columns
+        self.drop = drop
+        self.cont_year =cont_year
+        self.year=year
+        self.month=month
+        self.day=day
+        self.weekday=weekday
+
+    @staticmethod
+    def find_date_columns(df):
+        if not isinstance(df, pd.DataFrame): df = pd.DataFrame(df)
+        is_datetime=pd.api.types.is_datetime64_any_dtype
+        cols = []
+        for col in df.columns:
+            if is_datetime(df[col]): cols.append(col)
+        return cols
+
+    def fit(self, X=None, y=None):
+        # Find date columns
+        if not isinstance(self.date_columns, list): self.date_columns = [self.date_columns]
+        if len(self.date_columns)==0:
+            self.date_columns = self.find_date_columns(X)
+        else:
+            self.date_columns = self.date_columns
+        return self
+
+    def transform(self, X):
+        X=X.copy()
+        for col in self.date_columns:
+            try:
+                tmp_date = pd.to_datetime(X[col], errors='coerce')
+                #year = tmp_date.apply()
+            
+                if self.cont_year: X[f"{col}_cont_year"] =  tmp_date.dt.year + (tmp_date.dt.month-1)/12 + (tmp_date.dt.day-1)/365
+                if self.year: X[f"{col}_year"] = tmp_date.dt.year
+                if self.month: X[f"{col}_month"] = tmp_date.dt.month
+                if self.day: X[f"{col}_day"] = tmp_date.dt.day
+                if self.weekday: X[f"{col}_day"] = tmp_date.dt.weekday
+                if self.drop: X.drop(col, axis=1, inplace=True)
+            except:
+                print(f"{col} could not complete")
+
+        return X
+
+
+
+class ImputeNA(BaseEstimator, TransformerMixin):
+    """String to numbers categorical encoder."""
+
+    def __init__(self,X:pd.DataFrame,numeric_imputer=None, categorical_imputer=None,**kwargs):
+        X = X.copy()
+        self.columns = X.columns.tolist()
+        self.num_cols = X.select_dtypes(include=np.number).columns.tolist()
+        self.cat_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
+        self.numeric_imputer =numeric_imputer
+        self.categorical_imputer = categorical_imputer
+    def fit(self, X, y):
+        self.numeric_imputer=self.numeric_imputer.fit(X[self.num_cols])
+        self.categorical_imputer=self.categorical_imputer.fit()
+        
+        return self
+
+    def transform(self, X):
+        cols = X.columns.tolist()
+        add_cols = set(self.columns) - set(self.num_cols) - set(self.cat_cols)
+        X[add_cols] = np.nan
+
+
+        nums = self.numeric_imputer.transform(X[self.num_cols])
+        nums = pd.DataFrame(nums, columns=self.numeric_imputer.get_feature_names())
+        cats = self.categorical_imputer.transform(X[self.cat_cols])
+        rest = X[set(cols) - set()]
+
+        new_X = pd.concat([nums, cats, rest], axis=1)
+
+        return X
+
+
+
 
 class MakeFormula(BaseEstimator, TransformerMixin):
     """String to numbers categorical encoder."""
