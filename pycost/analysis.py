@@ -166,7 +166,7 @@ class Model:
 
         if (test_split > 0.0) & (test_split < 1.0):
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-                self.X, self.y, test_size=self.test_split, random_state=self.random_state)
+                np.asarray(self.X), np.asarray(self.y), test_size=self.test_split, random_state=self.random_state)
         else:
             self.X_train, self.X_test, self.y_train, self.y_test = (
                 self.X, self.X, self.y, self.y)
@@ -320,7 +320,8 @@ class Model:
             name = name + ".joblib"
 
         obj = copy.deepcopy(self)
-        del obj.y, obj.X
+        del obj.y,
+        del obj.X
         if remove_data:
             #del obj.X
             #del obj.y
@@ -377,7 +378,7 @@ class Model:
         #summary_df.columns = summary_df.loc[0]
         #summary_df = summary_df.loc[1:]
         preds = pd.DataFrame(
-            {"Actual": self.y.values.ravel(), "Predicted": self.predict(X=self.X)})
+            {"Actual": np.asarray(self.y).ravel(), "Predicted": self.predict(X=self.X)})
         act_vs_pred = preds.hvplot(x='Predicted', y='Actual', kind='scatter',
                                    title='Actual vs Predicted') * hv.Slope(1, 0).opts(color='red')
         summary = pn.Row(
@@ -490,6 +491,13 @@ class Models:
 
         # Build Models and Add Them to DB
         self.build_models(**args, **kwargs)
+
+    def __repr__(self) -> str:
+        s = "Many Models API\n"
+        s+= f"{'Title: '.join(self.db['title'].unique())}"
+        s+= f"{len(self.db)} Models were fit"
+        
+        return s
 
     def add_models(self, List_of_Models=[]):
         if type(List_of_Models) != list:
@@ -681,7 +689,7 @@ class Models:
 
         # Side Bar
         inputs = dict()
-        for col in self.db.Features[0]:
+        for col in self.db.Features[1]:
             if self.df[col].dtype == 'object':
                 inputs[col] = pn.widgets.Select(
                     name=col, value=self.df[col][0], options=self.df[col].unique().tolist())
@@ -711,6 +719,20 @@ class Models:
         else:
             return app
 
+    def summary(self):
+        #s = [mod.fit().summary() for mod in self.db.Model]
+
+        results = []    
+        for index, row in self.db.iterrows():
+            mod = row.Model
+            try:
+                #summary = mod.fit().summary()
+                summary = mod.summary()
+                summary.index = [index]
+            except:
+                summary = pd.DataFrame({'FitError':[True]}, index=[index])
+            results.append(summary)
+        return pd.concat(results, ignore_index=True) 
 
 class AutoPipeline:
     def __init__(
