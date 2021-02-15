@@ -1,9 +1,5 @@
 # my modules
-from tqdm.std import trange
-try:
-    from . import clean
-except:
-    import clean
+from pycost import clean
 
 # utils
 from datetime import datetime
@@ -53,7 +49,7 @@ from sklearn.model_selection import cross_val_score  # Cross validated score
 
 class TEST:
     def __init__(self) -> None:
-        pass
+        print("this is a test")
 
 
 class Model:
@@ -62,13 +58,34 @@ class Model:
     # drop columns with too many na's
     # impute strategy --> Median, KNN, someother model regression
 
-    # Model Flow:
-    # 1. get analysis columns only ( throw away rest)
-    # 2. na_preprocess analysis columns (either impute or drop)
-    # 3. calculate X based on patsy formula
-    # 4. add new features (Poly, Power, etc.)
-    # 5. do feature selection
-    # 6. fit chosen model
+    '''
+    Master modeling class that handles many of the details of Machine Learning.
+    Implements the 
+  
+    Model Flow:
+    1. get analysis columns only ( throw away rest)
+    2. na_preprocess analysis columns (either impute or drop)
+    3. calculate X based on patsy formula
+    4. add new features (Poly, Power, etc.)
+    5. do feature selection
+    6. fit chosen model
+    
+    Example:
+    df = pd.DataFrame({'y': [1,2,3,4,5], 'x1': [2,4,6,8,10], 'x2': ["a", "b","b","a","a"]})
+    myModel = Model(df, "y~x1+x2-1", model= LinearRegression(),
+        meta_data={
+            'title': "Example Analysis",
+            'desc': "Do some anlaysis"}
+            )
+    myModel.fit().summary()
+    myModel.predict(new_df)
+    myModel.save("myModel")
+
+
+    # load data
+    loadedModel = Model.load("myModel")
+    
+    '''
 
     def __init__(self, df=None, formula=None, target=None, model=RandomForestRegressor(), test_split=.2, random_state=42, handle_na=True, na_processor=None, preprocessor=None, meta_data=dict(title="My Report", desc="N/A", analyst="N/A"), **kwargs):
         # Get attributes
