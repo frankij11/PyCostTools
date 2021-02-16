@@ -169,7 +169,7 @@ class Model:
                 np.asarray(self.X), np.asarray(self.y), test_size=self.test_split, random_state=self.random_state)
         else:
             self.X_train, self.X_test, self.y_train, self.y_test = (
-                self.X, self.X, self.y, self.y)
+                np.asarray(self.X), np.asarray(self.X), np.asarray(self.y), np.asarray(self.y) )
 
         # Preprocessor:
         self.preprocessor = preprocessor
@@ -359,7 +359,20 @@ class Model:
             raise("Could not create formula object. is df missing? Try adding data")
         return obj
 
-    def report(self, show=True, **kwargs):
+    def report(self, show=False, **kwargs):
+        '''
+        Generates a PANEL object of interesting Model Stats and Data Info
+
+        can be saved as HTML, PDF
+
+        '''
+        def get_df_info(df):
+            import io
+            buffer = io.StringIO()
+            df.info(buf=buffer)
+            s = buffer.getvalue()
+            return s            
+
         X = self.X
         app = pn.template.BootstrapTemplate(title="Model Report")
         pn.config.sizing_mode = "stretch_width"
@@ -385,7 +398,16 @@ class Model:
             pn.Card(summary_df, title='Summary Statistics', height=500),
             pn.Card(act_vs_pred, title="Actual Vs Predicted", height=500)
         )
+
+        raw_data_page = pn.Row(
+            pn.Card(pn.pane.Markdown(get_df_info(self.df)), title='Data Info', height=500 ),
+            pn.Card(self.df.describe(), title='Data Stats', height=500)
+        )
+
+
+
         pages = pn.Tabs(('Summary', summary),
+                        ('Raw Data Stats', raw_data_page),
                         ('Feature Importance', pn.panel("in work")))
 
         app.main.append(pages)
@@ -468,6 +490,16 @@ class LC_Model(Model):
 
 
 class Models:
+    '''
+    This class provides an interface to build many different models based on the `Model` class
+    and store them in a single place "db". This DataFrame stores each model and it's meta data
+    self.db.Model is the colum that stores the actual Model.
+
+    KNOWN ISSUE!!! 
+        When building many models this can exceed memory and cause models
+        to appear not to fit. In such cases it may be useful to filter db
+        to the model of interest and use the Model interface.
+    '''
     def __init__(self, df, formulas=[], by=[], target=None, models=[LinearRegression(),
                                                                     RandomForestRegressor(),
                                                                     LassoCV(
@@ -476,6 +508,8 @@ class Models:
                                                                         cv=5),
                                                                     ElasticNetCV(cv=5)], test_split=.2, random_state=42, meta_data=dict(title="My Report", desc="N/A", analyst="N/A"), tags={}, **kwargs):
 
+
+        # Initialize Models Variables
         self.ModelDate = datetime.now()
         self.Models = {}
         self.db = pd.DataFrame()
@@ -484,14 +518,12 @@ class Models:
         self.n_models = 0
         self.run_time = dt.datetime.now() - dt.datetime.now()
 
-        # get all args that were passed
-        args = locals()
-        del args['self']
-        del args['kwargs']
-
         # Build Models and Add Them to DB
-        self.build_models(**args, **kwargs)
 
+        if len(kwargs) ==0:
+            self.build_models(self,df,formulas,by,target,models,test_split, random_state,meta_data,tags)
+        else:
+            self.build_models(self,df,formulas,by,target,models,**kwargs)# , **kwargs
     def __repr__(self) -> str:
         s = "Many Models API\n"
         s+= f"{'Title: '.join(self.db['title'].unique())}"
@@ -679,7 +711,7 @@ class Models:
         #results = pd.DataFrame(dict(Predictions=y_all))
         return y_all
 
-    def report(self, show=True, **kwargs):
+    def report(self, show=False, **kwargs):
         #X = self.X
         app = pn.template.BootstrapTemplate(title="Model Report")
         pn.config.sizing_mode = "stretch_width"
@@ -688,24 +720,27 @@ class Models:
         app.header.header_background = 'blue'
 
         # Side Bar
-        inputs = dict()
-        for col in self.db.Features[1]:
-            if self.df[col].dtype == 'object':
-                inputs[col] = pn.widgets.Select(
-                    name=col, value=self.df[col][0], options=self.df[col].unique().tolist())
-            else:
-                inputs[col] = pn.widgets.FloatSlider(
-                    name=col, value=self.df[col].median())
+        # inputs = dict()
+        # for col in self.db.Features[1]:
+        #     if self.df[col].dtype == 'object':
+        #         inputs[col] = pn.widgets.Select(
+        #             name=col, value=self.df[col][0], options=self.df[col].unique().tolist())
+        #     else:
+        #         inputs[col] = pn.widgets.FloatSlider(
+        #             name=col, value=self.df[col].median())
 
-        widgets = pn.WidgetBox("# Model Inputs", *[inputs[w] for w in inputs])
-        app.sidebar.append(widgets)
+        # widgets = pn.WidgetBox("# Model Inputs", *[inputs[w] for w in inputs])
+        # app.sidebar.append(widgets)
+        
         # Main
-        summary_df = self.db
+        db = self.db.drop('Model', axis=1)
+        summary_df = self.summary()
         #summary_df.columns = summary_df.loc[0]
         #summary_df = summary_df.loc[1:]
         #preds =pd.DataFrame({"Actual" : self.df[self.Target[0]], "Predicted" : self.predict()})
         #act_vs_pred = preds.hvplot(x='Predicted', y='Actual',kind='scatter', title='Actual vs Predicted') * hv.Slope(1,0).opts(color='red')
         summary = pn.Row(
+            pn.Card(db, title='Available Models', height=500),
             pn.Card(summary_df, title='Summary Statistics', height=500)
             #pn.Card(act_vs_pred, title= "Actual Vs Predicted" , height=500)
         )
@@ -973,6 +1008,9 @@ class AutoRegressionLinear:
 
     def predict(self, X, y=None):
         return self.best_estimator_.predict(X)
+
+    def summary(self):
+        return Model.stats(self.X_test, self.y_test, self.X_train, self.y_train)
 
 
 if __name__ == "__main__":
