@@ -518,12 +518,14 @@ class Models:
         self.n_models = 0
         self.run_time = dt.datetime.now() - dt.datetime.now()
 
-        # Build Models and Add Them to DB
+        # get all args that were passed
+        args = locals()
+        del args['self']
+        del args['kwargs']
 
-        if len(kwargs) ==0:
-            self.build_models(self,df,formulas,by,target,models,test_split, random_state,meta_data,tags)
-        else:
-            self.build_models(self,df,formulas,by,target,models,**kwargs)# , **kwargs
+        # Build Models and Add Them to DB
+        self.build_models(**args, **kwargs)
+
     def __repr__(self) -> str:
         s = "Many Models API\n"
         s+= f"{'Title: '.join(self.db['title'].unique())}"
@@ -547,6 +549,7 @@ class Models:
                     row.index = new_id
                     self.db = pd.concat(
                         [self.db[new_id], row], axis=0, sort=False, join='outer')
+
 
     def build_models(self, df, formulas=[], by=[], target=None, models=[LinearRegression(),
                                                                         RandomForestRegressor(),
