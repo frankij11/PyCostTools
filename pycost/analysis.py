@@ -1,5 +1,5 @@
 # my modules
-from pycost import clean
+from pycost import process
 
 # utils
 from datetime import datetime
@@ -12,7 +12,7 @@ import copy
 
 # Data Model
 import numpy as np
-from numpy.lib.function_base import select
+from numpy.lib.function_base import piecewise, select
 from numpy.lib.shape_base import _replace_zero_by_x_arrays
 import pandas as pd
 #import param
@@ -34,7 +34,7 @@ from sklearn.model_selection import RandomizedSearchCV
 
 # Pre Processing
 from sklearn.feature_selection import SelectKBest, f_classif, f_regression
-
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, OneHotEncoder, PolynomialFeatures, PowerTransformer
@@ -46,10 +46,9 @@ from sklearn.pipeline import Pipeline
 from sklearn import metrics
 from sklearn.model_selection import cross_val_score  # Cross validated score
 
+# Utils
+from sklearn.utils.validation import check_is_fitted
 
-class TEST:
-    def __init__(self) -> None:
-        print("this is a test")
 
 
 class Model:
@@ -177,7 +176,7 @@ class Model:
         if preprocessor is None:
             self.preprocessor = Pipeline(
                 steps=[
-                    ('dateCleaner', clean.DateTransform()),
+                    ('dateCleaner', process.DateTransform()),
                     ('imputer', SimpleImputer(strategy='median')),
                     ('scaler', StandardScaler()),
                     #('addPoly', PolynomialFeatures(include_bias=False) )
@@ -203,6 +202,20 @@ class Model:
             summary += "\n\nModel has not been fit to data yet"
 
         return summary
+
+    def __getstate__(self):
+        '''Pickle Instructions'''
+        self.y =None
+        self.X =None
+        self.save_date = datetime.now()
+        #print("I'm being pickled")
+        return self.__dict__
+    
+    # Unpickle
+    def __setstate__(self, d):
+        '''Unpickle Instructions'''
+        self.__dict__ = d
+        self.y,self.X = patsy.dmatrices(self.formula, self.df)
 
     def fit(self):
         X = self.X_train
@@ -254,6 +267,7 @@ class Model:
             'ModelDate': [np.nan],
             'ReportDate': [datetime.now()],
             'RSQ': [metrics.r2_score(y_pred, y_test)],
+            'RMSE':[metrics.mean_squared_error(y_pred, y_test)**.5] ,
             'MSE': [metrics.mean_squared_error(y_pred, y_test)],
             'AbsErr': [metrics.mean_absolute_error(y_pred, y_test)],
             'CV': [metrics.mean_squared_error(y_pred, y_test) / np.mean(y_test)],
@@ -268,7 +282,7 @@ class Model:
                 'TrainY_Mean': np.mean(y_train),
                 'TrainY_STD': np.std(y_train)
 
-            })
+            }).assign(TrainY_CV= lambda x: x.TrainY_STD / x.TrainY_Mean )
         else:
             Train_Info = pd.DataFrame()
 
@@ -798,7 +812,7 @@ class AutoPipeline:
                 list(cat_subset.iloc[:, i].dropna().unique()))
 
         date_pipeline = Pipeline([
-            ('dateFeatures', clean.DateTransform())
+            ('dateFeatures', process.DateTransform())
         ])
 
         num_pipeline = Pipeline([
@@ -840,7 +854,7 @@ class AutoRegressionTrees:
                 list(cat_subset.iloc[:, i].dropna().unique()))
 
         date_pipeline = Pipeline([
-            ('dateFeatures', clean.DateTransform())
+            ('dateFeatures', process.DateTransform())
         ])
 
         num_pipeline = Pipeline([
@@ -918,7 +932,7 @@ class AutoRegressionTrees:
         return Model.stats(self.X_test, self.y_test, self.X_train, self.y_train)
 
 
-class AutoRegressionLinear:
+class AutoRegressionLinear(BaseEstimator):
     def __init__(self, scoring_function='neg_mean_squared_error', n_iter=50):
         self.scoring_function = scoring_function
         self.n_iter = n_iter
@@ -932,8 +946,8 @@ class AutoRegressionLinear:
         # Grid Search, Random Search
 
     def fit(self, X, y):
-        X_train = X
-        y_train = y
+        X_train = self.X_train =self.X_test = X 
+        y_train  = self.y_train =self.y_test = y
 
         categorical_values = []
 
@@ -945,7 +959,7 @@ class AutoRegressionLinear:
                 list(cat_subset.iloc[:, i].dropna().unique()))
 
         date_pipeline = Pipeline([
-            ('dateFeatures', clean.DateTransform())
+            ('dateFeatures', process.DateTransform())
         ])
 
         num_pipeline = Pipeline([
@@ -974,6 +988,7 @@ class AutoRegressionLinear:
         model_pipeline = Pipeline(model_pipeline_steps)
 
         total_features = preprocessor.fit_transform(X_train).shape[1]
+        feature_incr = max(1,round(total_features/10))
 
         optimization_grid = []
 
@@ -981,7 +996,7 @@ class AutoRegressionLinear:
         optimization_grid.append({
             'preprocessor__numerical__scaler': [RobustScaler(), StandardScaler(), MinMaxScaler()],
             'preprocessor__numerical__cleaner__strategy': ['mean', 'median'],
-            'feature_selector__k': list(np.arange(1, total_features, round(total_features/10))) + ['all'],
+            'feature_selector__k': list(np.arange(1, total_features, feature_incr)) + ['all'],
             'estimator': [LinearRegression()]
         })
 
@@ -989,7 +1004,7 @@ class AutoRegressionLinear:
         optimization_grid.append({
             'preprocessor__numerical__scaler': [RobustScaler(), StandardScaler(), MinMaxScaler()],
             'preprocessor__numerical__cleaner__strategy': ['mean', 'median'],
-            'feature_selector__k': list(np.arange(1, total_features, round(total_features/10))) + ['all'],
+            'feature_selector__k': list(np.arange(1, total_features, feature_incr)) + ['all'],
             'estimator': [ElasticNetCV()],
             'estimator__l1_ratio': [0.01, .1, .5, .7, .9, .95, .99, 1],
             'estimator__n_alphas': [100]
@@ -1006,14 +1021,18 @@ class AutoRegressionLinear:
         )
 
         search.fit(X_train, y_train)
+        self.cv_results_ = search.cv_results_
+        self.best_score_ = search.best_score_
+        self.refit_time_ = search.refit_time_
         self.best_estimator_ = search.best_estimator_
         self.best_pipeline = search.best_params_
+        return self
 
     def predict(self, X, y=None):
         return self.best_estimator_.predict(X)
 
     def summary(self):
-        return Model.stats(self.X_test, self.y_test, self.X_train, self.y_train)
+        return Model.stats(self.best_estimator_,self.X_test, self.y_test, self.X_train, self.y_train)
 
 
 if __name__ == "__main__":
