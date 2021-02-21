@@ -1,9 +1,0 @@
-pandas
-numpy
-patsy
-openpyxl
-sklearn
-statsmodels
-holoviews
-hvplot
-panel
