@@ -178,11 +178,11 @@ class FeatureCheck(BaseEstimator, TransformerMixin):
         try to make types equal to origninal dataframe (will ignore if can't be coerced)
     '''
     def __init__(self, add_features=True, coerce_type=True):
-        self.add_feaures=add_features
+        self.add_features=add_features
         self.coerce_type=coerce_type
     
     def fit(self,X,y=None):
-        df = pd.DataFrame(X).copy
+        df = pd.DataFrame(X).copy()
         self.columns = df.columns.to_list()
         self.dtypes = df.dtypes
     
@@ -230,13 +230,13 @@ class ImputeNA(BaseEstimator, TransformerMixin):
 
         if len(self.num_cols) >0: 
             nums = self.numeric_imputer.transform(X[self.num_cols])
-            nums = pd.DataFrame(nums, columns=self.numeric_imputer.get_feature_names())
+            nums = pd.DataFrame(nums, columns=self.num_cols)
         else:
             nums = pd.DataFrame()
 
         if len(self.cat_cols) >0: 
             cats = self.categorical_imputer.transform(X[self.cat_cols])
-            cats = pd.DataFrame(cats,columns = self.categorical_imputer.get_feature_names())
+            cats = pd.DataFrame(cats,columns = self.cat_cols)
         else:
             cats = pd.DataFrame()
 
@@ -267,7 +267,7 @@ class MakeFormula(BaseEstimator, TransformerMixin):
 
     PARAMTERS:
     ----------
-    formula: default '''`''' wildcard string to get all variables (this is exclusive to this libary)
+    formula: default '''^''' wildcard string to get all variables (this is exclusive to this libary)
         for more details see patsy
     
     handle_na: default =ImputeNA()
@@ -283,18 +283,18 @@ class MakeFormula(BaseEstimator, TransformerMixin):
     return_y default =False
     
     """
-
-    def __init__(self,formula='`', handle_na=ImputeNA(),return_type='dataframe', return_X=True,return_y=False):
+    _all = "^"
+    def __init__(self,formula='^', handle_na=ImputeNA(),return_type='dataframe',keep_cols="all", return_X=True,return_y=False):
         self.formula = formula
         
         self.handle_na=handle_na
         if self.handle_na==False: self.handle_na = None
         
         self.return_type = return_type
+        self.keep_cols = keep_cols
         self.return_X = return_X
         self.return_y = return_y
 
-        
     
     def __getstate__(self):
         '''Pickle Instructions'''
@@ -308,42 +308,61 @@ class MakeFormula(BaseEstimator, TransformerMixin):
         '''Unpickle Instructions'''
         self.__dict__ = d
         if not self.df.empty():
-            self.y,self,X = patsy.dmatrices(self.formula, self.df)
+            self = self.fit(self.df)
     
     def fit(self, X, y=None):
+        # handle NAs
         if not self.handle_na is None: self.handle_na.fit(X)
 
-        if "`" in self.formula:
+        # find wildcard in formula
+        if self._all in self.formula:
             if "'" in self.formula:
                 all_cols = " + ".join([f'Q("{col}")' for col in X.columns])
             else:
                 all_cols = " + ".join([f"Q('{col}')" for col in X.columns])
-            self.formula.replace("`", all_cols)
+            self.formula=self.formula.replace(self._all, all_cols)
+        
+        # parse formula
         self.split_formula = self.formula.split("~")
+        
+        # keep copy of data
         self.df = X
+
+        # find design matrix formula
         if len(self.split_formula) > 1:
             self.y, self.X = patsy.dmatrices(self.formula, self.df)
+            self.y=self.y.design_info
+            self.X = self.X.design_info
         else:
             self.X = patsy.dmatrix(self.formula, self.df)
+            self.X = self.X.design_info
+        
+
+        # fin
 
         return self
 
     def transform(self, X):
-        X = X.copy
+        X = X.copy()
         if not self.handle_na is None: X = self.handle_na.transform(X)
 
-        if self.return_X:
-            X_transform = patsy.build_design_matrices([self.X.design_info], X, return_type=self.return_type)[0]
-        if self.return_y:
-            y_transform = patsy.build_design_matrices([self.y.design_info], X, return_type=self.return_type)[0]
-        
         if self.return_X & self.return_y:
-            return [y_transform, X_transform]
+            X_transform = patsy.build_design_matrices([self.X], X, return_type=self.return_type)[0]
+            y_transform = patsy.build_design_matrices([self.y], X, return_type=self.return_type)[0]
 
-        if len(self.split_formula) > 1:
-            ans = patsy.build_design_matrices([self.y.design_info, self.X.design_info], X, return_type=self.return_type)
+            ans = [y_transform, X_transform]
+        
+        elif self.return_X:
+            X_transform = patsy.build_design_matrices([self.X], X, return_type=self.return_type)[0]
+            ans = X_transform
+        
+        elif self.return_y:
+            y_transform = patsy.build_design_matrices([self.y], X, return_type=self.return_type)[0]
+            ans = y_transform
+        
         else:
-            ans= patsy.build_design_matrices([self.X.design_info], X, return_type=self.return_type)[0]
+            raise ValueError(self, "Need to choose an return X or return Y")
+
         return ans
 
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
