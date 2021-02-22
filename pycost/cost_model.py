@@ -6,6 +6,10 @@ class BaseModel(param.paramerterized):
     Base model for building a cost estimate. Similar to an
     empty worksheet. All other models should extend this class
     '''
+    meta= param.Dict()
+    inputs = param.Dict()
+    estimate= param.DataFrame(columns=("Element", "units","FY", "Value"))
+
     def __init___(self, name, categories, analyst, **kwargs):
         pass
 
@@ -36,10 +40,14 @@ class BaseModel(param.paramerterized):
         pass
         
 
-class CostModel:
+class CostModel(BaseModel):
     '''
     Collection of estimates, similar to a workbook in Excel
     '''
+
+    models= param.Dict()
+    
+
     pass
 
 class Inputs:
