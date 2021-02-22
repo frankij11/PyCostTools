@@ -180,31 +180,36 @@ class FeatureCheck(BaseEstimator, TransformerMixin):
     def __init__(self, add_features=True, coerce_type=True):
         self.add_features=add_features
         self.coerce_type=coerce_type
+
     
     def fit(self,X,y=None):
         df = pd.DataFrame(X).copy()
         self.columns = df.columns.to_list()
         self.dtypes = df.dtypes
-    
+        self.sample_data = df.head()
+        return self
+
     def transform(self, X):
         X = pd.DataFrame(X).copy()
         cols = X.columns.tolist()
         add_cols = set(self.columns) - set(cols)
-        if add_cols == set(self.columns): X = pd.DataFrame([None], columns=self.columns[0])
-        if self.add_feaures:
+        if add_cols == set(self.columns): X = pd.DataFrame({self.columns[0]: [np.nan]})
+        if self.add_features:
+            
             X[list(add_cols)] = np.nan
         else:
             print(f"failed feature check",f"{len(add_cols)} featuers not present in dataset", end="/n")
             
         if self.coerce_type:
-            X.astype(self.dtypes, errors="ignore")
+            for col in self.columns:
+                X[col] = X[col].astype(self.sample_data[col].dtype, errors="ignore")
 
         return X
 
 class ImputeNA(BaseEstimator, TransformerMixin):
     """String to numbers categorical encoder."""
 
-    def __init__(self,numeric_imputer=SimpleImputer(strategy='median'), categorical_imputer=SimpleImputer(strategy='constant', fill_value="missing"),**kwargs):
+    def __init__(self,numeric_imputer=SimpleImputer( strategy='median'), categorical_imputer=SimpleImputer(strategy='most_frequent'),**kwargs):
         self.numeric_imputer =numeric_imputer
         self.categorical_imputer = categorical_imputer
     def fit(self, X:pd.DataFrame, y=None):
