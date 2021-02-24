@@ -90,7 +90,7 @@ class Model:
         # Get attributes
         #self._meta_data = dict(title = title,desc= desc,analyst = analyst, **kwargs)
         self._meta_data = dict(**meta_data, **kwargs)
-
+        steps = list()
         if df is None:
             df = self.open_data()
         if (formula is None):  # Start Feature selection routine
@@ -100,15 +100,7 @@ class Model:
 
             # Start Feature selection routine
             # Implement pipeline to Add Features / Remove Features
-            formula = f"Q('{target}') ~ "
-            for var in df.drop(target, axis=1).columns:
-                if df[var].dtype is np.number:
-                    # Use Q just to be safe
-                    formula += f" + Q('{var}')"
-                else:
-                    var_ratio = len(df[var].unique()) / len(df[var])
-                    if var_ratio < .05:
-                        formula += f" + C(Q('{var}'))"
+            formula = f"Q('{target}') ~ ^"
         else:
             pass
             #target = patsy.dmatrices(formula, df.loc[0:2])[0].design_info.column
@@ -122,35 +114,15 @@ class Model:
         self.na_processor = na_processor
         if na_processor is None:
             # NEED TO NOT PROCESS TARGET VARIABLE!!!!!
-            # na_processor = ImputeNA()
-            num_cols = self.df[self.feature_cols].select_dtypes(
-                include=np.number).columns.tolist()
-            obj_cols = self.df[self.feature_cols].select_dtypes(
-                exclude=np.number).columns.tolist()
-            numeric_transformer = Pipeline(
-                steps=[('imputer', SimpleImputer(strategy='median'))])
-            categorical_transformer = Pipeline(steps=[('imputer', SimpleImputer(strategy='constant', fill_value='missing'))
-                                                      ])
-            self.na_processor = ColumnTransformer(
-                transformers=[('num', numeric_transformer, num_cols),
-                              ('cat', categorical_transformer, obj_cols)
-                              ])
-
-        self.na_processor.fit(self.df)
+            na_processor = process.ImputeNA()
 
         self.handle_na = handle_na
-        if self.handle_na:
-            # NOT WORKING
-            #print("Fill NA's not implemented yet")
-            #print(df.apply(lambda x: sum(x.isna()), axis=1) )
-            self.num_cols = num_cols
-            self.obj_cols = obj_cols
-            self.df = pd.concat([
-                df[[*self.target_cols]],
-                pd.DataFrame(self.na_processor.transform(
-                    self.df), columns=[*num_cols, *obj_cols])
-            ], axis=1)
+        if self.handle_na | (not na_processor is None):
+            steps.append(('handle_na', self.na_processor))
 
+        steps.append(('formula', process.MakeFormula(self.formula)))
+
+            
         self.formula = formula
         self.ModelDate = datetime.now()
 
