@@ -33,6 +33,7 @@ from sklearn.model_selection import RandomizedSearchCV
 
 
 # Pre Processing
+from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, f_classif, f_regression
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.model_selection import train_test_split
@@ -50,6 +51,7 @@ from sklearn.model_selection import cross_val_score  # Cross validated score
 from sklearn.utils.validation import check_is_fitted
 
 
+__all__ = ["Model", "Models", "AutoRegressionTrees", "AutoRegressionLinear"]
 
 class Model:
     # issues:
@@ -59,17 +61,31 @@ class Model:
 
     '''
     Master modeling class that handles many of the details of Machine Learning.
-    Implements the 
+    Implements the followin generic model flow. However, the pipeline objet 
+    is able to be updated prior to fitting.
   
-        Model Flow:
+    Model Flow:
         1. get analysis columns only ( throw away rest)
         2. na_preprocess analysis columns (either impute or drop)
         3. calculate X based on patsy formula
         4. add new features (Poly, Power, etc.)
         5. do feature selection
         6. fit chosen model
-        
-        Example:
+
+    Args:
+        df (pd.DataFrame): DataFrame for analysis
+        formula (str): Formula string based on patsy. Can use ``^`` to get all variables
+        model (model | list of models): A model that implements model.fit(X,y) and model.predict(X)
+        test_split (float): percentage of data points to be held out from fitting algorithm
+        random_state (int): passed for test split and any algorithm that accepts random_state
+        handle_na (bool): if True fills NA using an algorithm. If False drops NAs
+        preprocessor (sklearn.pipeline): default used Model Flow. However, can replace with user define algorithm
+        title (str): Name of the analysis used for documentation
+        analyst (str): Name of the analyst used for documentation
+        description (str): Description of analysis used for documentation 
+        **kwargs: Keywords can also be passed to further document analysis such as Version = 2020 Update Cycle     
+    
+    Example:
         df = pd.DataFrame({'y': [1,2,3,4,5], 'x1': [2,4,6,8,10], 'x2': ["a", "b","b","a","a"]})
         myModel = Model(df, "y~x1+x2-1", model= LinearRegression(),
             meta_data={
@@ -77,8 +93,10 @@ class Model:
                 'desc': "Do some anlaysis"}
                 )
         myModel.fit().summary()
-        myModel.predict(new_df)
+        myModel.predict(pd.DataFrame()) # use an empty dataframe to predict mean estimate
         myModel.save("myModel")
+        app = myModel.report(show=False)
+        app.save
 
 
         # load data
@@ -86,13 +104,16 @@ class Model:
     
     '''
 
-    def __init__(self, df=None, formula=None, target=None, model=RandomForestRegressor(), test_split=.2, random_state=42, handle_na=True, na_processor=None, preprocessor=None, meta_data=dict(title="My Report", desc="N/A", analyst="N/A"), **kwargs):
+    def __init__(self, df=None, formula=None, target=None, model=RandomForestRegressor(), test_split=.2, random_state=42, handle_na=True,preprocessor=True, title="My Report", description="N/A", analyst="N/A", **kwargs):
         # Get attributes
-        #self._meta_data = dict(title = title,desc= desc,analyst = analyst, **kwargs)
-        self._meta_data = dict(**meta_data, **kwargs)
+        self._meta_data = dict(title = title,description= description,analyst = analyst, **kwargs)
+        #self._meta_data = dict(**meta_data, **kwargs)
 
+        # allow user to load data from file
         if df is None:
             df = self.open_data()
+
+        # allow user to enter either formula or target variable
         if (formula is None):  # Start Feature selection routine
             if (target is None):
                 print(df.columns.tolist())
@@ -100,57 +121,14 @@ class Model:
 
             # Start Feature selection routine
             # Implement pipeline to Add Features / Remove Features
-            formula = f"Q('{target}') ~ "
-            for var in df.drop(target, axis=1).columns:
-                if df[var].dtype is np.number:
-                    # Use Q just to be safe
-                    formula += f" + Q('{var}')"
-                else:
-                    var_ratio = len(df[var].unique()) / len(df[var])
-                    if var_ratio < .05:
-                        formula += f" + C(Q('{var}'))"
-        else:
-            pass
-            #target = patsy.dmatrices(formula, df.loc[0:2])[0].design_info.column
+            formula = f"Q('{target}') ~ ^ "
+
         self.analysis_cols = self.get_formula_cols(formula, df)
         self.target_cols = self.get_formula_cols(formula, df, target_val=True)
-        self.feature_cols = self.get_formula_cols(
-            formula, df, feature_vals=True)
+        self.feature_cols = self.get_formula_cols(formula, df, feature_vals=True)
 
         self.df = df[self.analysis_cols]
-
-        self.na_processor = na_processor
-        if na_processor is None:
-            # NEED TO NOT PROCESS TARGET VARIABLE!!!!!
-            # na_processor = ImputeNA()
-            num_cols = self.df[self.feature_cols].select_dtypes(
-                include=np.number).columns.tolist()
-            obj_cols = self.df[self.feature_cols].select_dtypes(
-                exclude=np.number).columns.tolist()
-            numeric_transformer = Pipeline(
-                steps=[('imputer', SimpleImputer(strategy='median'))])
-            categorical_transformer = Pipeline(steps=[('imputer', SimpleImputer(strategy='constant', fill_value='missing'))
-                                                      ])
-            self.na_processor = ColumnTransformer(
-                transformers=[('num', numeric_transformer, num_cols),
-                              ('cat', categorical_transformer, obj_cols)
-                              ])
-
-        self.na_processor.fit(self.df)
-
         self.handle_na = handle_na
-        if self.handle_na:
-            # NOT WORKING
-            #print("Fill NA's not implemented yet")
-            #print(df.apply(lambda x: sum(x.isna()), axis=1) )
-            self.num_cols = num_cols
-            self.obj_cols = obj_cols
-            self.df = pd.concat([
-                df[[*self.target_cols]],
-                pd.DataFrame(self.na_processor.transform(
-                    self.df), columns=[*num_cols, *obj_cols])
-            ], axis=1)
-
         self.formula = formula
         self.ModelDate = datetime.now()
 
@@ -160,21 +138,21 @@ class Model:
 
         # get y, X to fit data on
         # , return_type='dataframe')
-        self.y, self.X = patsy.dmatrices(formula, self.df)
-        self.column_names = self.X.design_info.column_names
-
+        #self.y, self.X = patsy.dmatrices(formula, self.df)
+        self.y =  process.MakeFormula(self.formula, handle_na=self.handle_na,return_X=False,return_y=True, return_type='dataframe').fit_transform(self.df)
+        self.X = self.df
         if (test_split > 0.0) & (test_split < 1.0):
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-                np.asarray(self.X), np.asarray(self.y), test_size=self.test_split, random_state=self.random_state)
+                self.X, self.y, test_size=self.test_split, random_state=self.random_state)
         else:
             self.X_train, self.X_test, self.y_train, self.y_test = (
-                np.asarray(self.X), np.asarray(self.X), np.asarray(self.y), np.asarray(self.y) )
+                self.X, self.X, self.y, self.y )
 
         # Preprocessor:
         self.preprocessor = preprocessor
         # All data should be numeric by now
-        if preprocessor is None:
-            self.preprocessor = Pipeline(
+        if self.preprocessor is True:
+             self.preprocessor = Pipeline(
                 steps=[
                     ('dateCleaner', process.DateTransform()),
                     ('imputer', SimpleImputer(strategy='median')),
@@ -184,8 +162,10 @@ class Model:
                 ]
             )
         self.model = Pipeline([
-            ('preprocess', self.preprocessor),
-            ('model', model)])
+            ('CheckFeatures',process.FeatureCheck() ), # adds features to new models if missing
+            ('formula', process.MakeFormula(self.formula, handle_na=self.handle_na, return_X=True, return_y=False) ),
+            ('preprocess', self.preprocessor), # implement rest of pipeline. All features should be numeric now
+            ('model', model)]) # implement estimator
         # fit(self)
 
     def __repr__(self):
@@ -202,11 +182,12 @@ class Model:
             summary += "\n\nModel has not been fit to data yet"
 
         return summary
-
+    
     def __getstate__(self):
         '''Pickle Instructions'''
-        self.y =None
-        self.X =None
+        # nothing to do here anymore since patsy is handled in process module
+        #self.y =None
+        #self.X =None
         self.save_date = datetime.now()
         #print("I'm being pickled")
         return self.__dict__
@@ -215,45 +196,23 @@ class Model:
     def __setstate__(self, d):
         '''Unpickle Instructions'''
         self.__dict__ = d
-        self.y,self.X = patsy.dmatrices(self.formula, self.df)
+        #self.y,self.X = patsy.dmatrices(self.formula, self.df)
 
     def fit(self):
         X = self.X_train
-        y = np.asarray(self.y_train).ravel()
+        y = self.y_train
         start_time = timeit.default_timer()
         self.model = self.model.fit(X, y)
         self.run_time = timeit.default_timer() - start_time
         return self
 
-    def predict(self, df=pd.DataFrame(), X=None):
-        # (new_x,) = patsy.build_design_matrices([self._X.design_info],
-        #                                 df)
+    def predict(self, df=None, X=None):
 
-        if df.empty:
+        if df is None:
             if X is None:
                 X = self.X
         else:
-            df = df.copy()
-
-            # need away to impute missing columns
-            # df = self.na_processor.transform(df)
-
-            #X = patsy.dmatrices(self.formula, df, return_type='dataframe')[1]
-            if self.handle_na:
-                df = pd.DataFrame(self.na_processor.transform(
-                    df), columns=[*self.num_cols, *self.obj_cols])
-            X = patsy.build_design_matrices([self.X.design_info], df)
-
-            # Add in code to make more robust
-            #add_vars = set(self.X.columns) - set(X.columns)
-            #X[add_vars] = np.nan
-
-            #del_vars = set(X) - set(self.X.columns.tolist())
-            # for each var in X and not in feature_names remove from X
-
-            #X.drop(del_vars, inplace=True)
-
-            #X = X[self.feature_names]
+            X = df.copy()
 
         return self.model.predict(X)
 
@@ -292,20 +251,20 @@ class Model:
 
     def summary(self):
 
-        s = self.stats(
-            model=self.model,
-            X_test=self.X_test,
-            y_test=self.y_test,
-            X_train=self.X_train,
-            y_train=self.y_train
-        )
+        # s = self.stats(
+        #     model=self.model,
+        #     X_test=self.X_test,
+        #     y_test=self.y_test,
+        #     X_train=self.X_train,
+        #     y_train=self.y_train
+        # )
 
-        results = s.assign(
-            Model=[self.model['model']],
-            Formula=self.formula,
-            RunTime=self.run_time,
-            ModelDate=self.ModelDate
-        )
+        # results = s.assign(
+        #     Model=[self.model['model']],
+        #     Formula=self.formula,
+        #     RunTime=self.run_time,
+        #     ModelDate=self.ModelDate
+        # )
 
         y_test = self.y_test
         y_pred = self.model.predict(self.X_test)
@@ -334,18 +293,16 @@ class Model:
             name = name + ".joblib"
 
         obj = copy.deepcopy(self)
-        del obj.y,
-        del obj.X
         if remove_data:
-            #del obj.X
-            #del obj.y
-            #del obj.df
+            del obj.X
+            del obj.y
+            del obj.df
             del obj.X_test
             del obj.X_train
             del obj.y_test
             del obj.y_train
         obj.save_date = datetime.now()
-        joblib.dump(obj, name, compress)
+        fName = joblib.dump(obj, name, compress)
         self.save_date = datetime.now()
         print(
             f"{name} (Model Size): {np.round(os.path.getsize(name) / 1024 / 1024, 2) } MB")
@@ -402,10 +359,11 @@ class Model:
 
         # Main
         summary_df = self.summary().T
-        #summary_df.columns = summary_df.loc[0]
-        #summary_df = summary_df.loc[1:]
-        preds = pd.DataFrame(
-            {"Actual": np.asarray(self.y).ravel(), "Predicted": self.predict(X=self.X)})
+
+        preds = pd.DataFrame({
+            "Actual": self.y.values.ravel(), 
+            "Predicted": self.predict(X=self.X).ravel()
+            })
         act_vs_pred = preds.hvplot(x='Predicted', y='Actual', kind='scatter',
                                    title='Actual vs Predicted') * hv.Slope(1, 0).opts(color='red')
         summary = pn.Row(
@@ -479,7 +437,7 @@ class Model:
         if feature_vals:
             formula = formula.split("~")[1]
         # test just the first 2 datapoints so it runs quicker?
-        df = df.loc[0:2]
+        df = df.sample(2)
         cols = []
         for col in df.columns:
 
@@ -778,13 +736,13 @@ class Models:
         for index, row in self.db.iterrows():
             mod = row.Model
             try:
-                #summary = mod.fit().summary()
-                summary = mod.summary()
+                summary = mod.fit().summary()
+                #summary = mod.summary()
                 summary.index = [index]
             except:
                 summary = pd.DataFrame({'FitError':[True]}, index=[index])
             results.append(summary)
-        return pd.concat(results, ignore_index=True) 
+        return pd.concat(results) 
 
 class AutoPipeline:
     def __init__(
@@ -980,10 +938,11 @@ class AutoRegressionLinear(BaseEstimator):
         ])
 
         model_pipeline_steps = []
-        # model_pipeline_steps.append(('dateFeatures',date_pipeline))
+        model_pipeline_steps.append(('CheckFeatures', process.FeatureCheck() ))
+        model_pipeline_steps.append(('dateFeatures',date_pipeline))
         model_pipeline_steps.append(('preprocessor', preprocessor))
-        model_pipeline_steps.append(
-            ('feature_selector', SelectKBest(f_regression, k='all')))
+        #model_pipeline_steps.append(('pca', PCA(svd_solver = 'full')))
+        model_pipeline_steps.append(('feature_selector', SelectKBest(f_regression, k='all')))
         model_pipeline_steps.append(('estimator', LinearRegression()))
         model_pipeline = Pipeline(model_pipeline_steps)
 
@@ -996,6 +955,7 @@ class AutoRegressionLinear(BaseEstimator):
         optimization_grid.append({
             'preprocessor__numerical__scaler': [RobustScaler(), StandardScaler(), MinMaxScaler()],
             'preprocessor__numerical__cleaner__strategy': ['mean', 'median'],
+            #'pca__n_components': range(0.7,0.95,0.05),
             'feature_selector__k': list(np.arange(1, total_features, feature_incr)) + ['all'],
             'estimator': [LinearRegression()]
         })
@@ -1004,6 +964,7 @@ class AutoRegressionLinear(BaseEstimator):
         optimization_grid.append({
             'preprocessor__numerical__scaler': [RobustScaler(), StandardScaler(), MinMaxScaler()],
             'preprocessor__numerical__cleaner__strategy': ['mean', 'median'],
+            #'pca': ['passthrough'],
             'feature_selector__k': list(np.arange(1, total_features, feature_incr)) + ['all'],
             'estimator': [ElasticNetCV()],
             'estimator__l1_ratio': [0.01, .1, .5, .7, .9, .95, .99, 1],

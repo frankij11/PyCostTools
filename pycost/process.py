@@ -14,14 +14,23 @@ from sklearn.pipeline import Pipeline
 
 import patsy
 
+__all__=["AutoPreProcess", "DateTransform", "FeatureCheck", "ImputeNA", "MakeFormula", "Clean"]
+
 def iferror(func,*args, **kwargs):
     if "error" not in kwargs: 
         error=None
     else:
         error = kwargs["error"]
-        kwargs.popitem('error')
+        kwargs.pop('error')
     try:
-        results = func(*args)
+        if len(args) > 0 and len(kwargs) ==0:
+            results = func(*args)
+        elif len(args) ==0 and len(kwargs) >0:
+            results = func(**kwargs)
+        elif len(args) > 0 and len(kwargs) > 0:
+            results = func(*args, **kwargs)
+        else:
+            func() 
     except:
         results = error
 
@@ -120,7 +129,7 @@ class AutoPreProcess(BaseEstimator, TransformerMixin):
 class DateTransform(BaseEstimator, TransformerMixin):
     """Date to numeric columns."""
 
-    def __init__(self,date_columns=[],drop=True, cont_year=True,year=True,month=True,day=False,weekday=False,**kwargs):
+    def __init__(self,date_columns=[],drop=True, cont_year=True,year=True,month=True,day=False,weekday=False,season=False,**kwargs):
         self.date_columns =date_columns
         self.drop = drop
         self.cont_year =cont_year
@@ -128,6 +137,7 @@ class DateTransform(BaseEstimator, TransformerMixin):
         self.month=month
         self.day=day
         self.weekday=weekday
+        self.season =season
 
     @staticmethod
     def find_date_columns(df):
@@ -158,12 +168,37 @@ class DateTransform(BaseEstimator, TransformerMixin):
                 if self.year: X[f"{col}_year"] = tmp_date.dt.year
                 if self.month: X[f"{col}_month"] = tmp_date.dt.month
                 if self.day: X[f"{col}_day"] = tmp_date.dt.day
-                if self.weekday: X[f"{col}_day"] = tmp_date.dt.weekday
+                if self.weekday: X[f"{col}_weekday"] = tmp_date.dt.weekday
+                if self.season: X[f"{col}_season"] = tmp_date.map(self.season_of_date)
                 if self.drop: X.drop(col, axis=1, inplace=True)
             except:
                 print(f"{col} could not complete")
 
         return X
+
+    @staticmethod
+    def season_of_date_column(date_col):
+        return date_col.map(self.season_of_date)
+
+    @staticmethod
+    def season_of_date(date):
+        try:
+            year = str(date.year)
+            seasons = {
+                'spring': pd.date_range(start='03/21/'+year, end='06/20/'+year),
+                'summer': pd.date_range(start='06/21/'+year, end='09/22/'+year),
+                'fall': pd.date_range(start='09/23/'+year, end='12/20/'+year),
+                }
+            if date in seasons['spring']:
+                return 'spring'
+            if date in seasons['summer']:
+                return 'summer'
+            if date in seasons['fall']:
+                return 'fall'
+            else:
+                return 'winter'
+        except:
+            return np.nan
 
 class FeatureCheck(BaseEstimator, TransformerMixin):
     '''
@@ -219,7 +254,7 @@ class ImputeNA(BaseEstimator, TransformerMixin):
         self.cat_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
 
         if len(self.num_cols) > 0: self.numeric_imputer=self.numeric_imputer.fit(X[self.num_cols])
-        if len(self.num_cols) >0: self.categorical_imputer=self.categorical_imputer.fit(X[self.cat_cols])
+        if len(self.cat_cols) >0: self.categorical_imputer=self.categorical_imputer.fit(X[self.cat_cols])
         
         self.rest_cols = set(self.columns) - set(self.num_cols) - set(self.cat_cols)
 
@@ -272,12 +307,12 @@ class MakeFormula(BaseEstimator, TransformerMixin):
 
     PARAMTERS:
     ----------
-    formula: default '''^''' wildcard string to get all variables (this is exclusive to this libary)
+    formula: default "`" wildcard string to get all variables (this is exclusive to this libary)
         for more details see patsy
     
     handle_na: default =ImputeNA()
         patsy default is to get rid of NAs. However this defaults to keep NA's by IMputing
-        pass your own Handle NA function with fit and transform methods
+        pass your own Handle NA function with fit and transform methods (must return DataFrame)
         pass None or False to remove rows with NA's
     
     return_type: default = 'dataframe'
@@ -288,13 +323,14 @@ class MakeFormula(BaseEstimator, TransformerMixin):
     return_y default =False
     
     """
-    _all = "^"
-    def __init__(self,formula='^', handle_na=ImputeNA(),return_type='dataframe',keep_cols="all", return_X=True,return_y=False):
+    
+    def __init__(self,formula='`', handle_na=ImputeNA(),return_type='dataframe',keep_cols="all", return_X=True,return_y=False):
         self.formula = formula
         
         self.handle_na=handle_na
         if self.handle_na==False: self.handle_na = None
-        
+        if self.handle_na==True: self.handle_na = ImputeNA()
+
         self.return_type = return_type
         self.keep_cols = keep_cols
         self.return_X = return_X
@@ -302,10 +338,11 @@ class MakeFormula(BaseEstimator, TransformerMixin):
 
     
     def __getstate__(self):
+        
         '''Pickle Instructions'''
         self.y =None
         self.X =None
-        self.save_date = datetime.now()
+        #self.save_date = datetime.now()
         #print("I'm being pickled")
         return self.__dict__
     
@@ -317,16 +354,12 @@ class MakeFormula(BaseEstimator, TransformerMixin):
     
     def fit(self, X, y=None):
         # handle NAs
+        X = X.copy()
         if not self.handle_na is None: self.handle_na.fit(X)
 
-        # find wildcard in formula
-        if self._all in self.formula:
-            if "'" in self.formula:
-                all_cols = " + ".join([f'Q("{col}")' for col in X.columns])
-            else:
-                all_cols = " + ".join([f"Q('{col}')" for col in X.columns])
-            self.formula=self.formula.replace(self._all, all_cols)
-        
+        # replace wildcard in formula
+        self.formula = self.parse_formula_wildcard(self.formula, X, wildcard="`")
+                
         # parse formula
         self.split_formula = self.formula.split("~")
         
@@ -347,6 +380,51 @@ class MakeFormula(BaseEstimator, TransformerMixin):
 
         return self
 
+    @staticmethod
+    def parse_formula_wildcard(formula,df, wildcard="`"):
+        # find wildcard in formula
+        
+        if "~" in formula:
+            target = MakeFormula.get_formula_cols(formula, df, target_val=True, feature_vals=False)
+        else:
+            target = []
+        if wildcard in formula:
+            # add check to see if variable can be added
+            all_cols = []
+            not_added = []
+            for col in [f"{col}" for col in df.columns if not col in target ]:
+                try:
+                    tmp = patsy.dmatrix(col, df)
+                    all_cols.append(col)
+                except:
+                    not_added.append(col)
+            all_cols = " + ".join(all_cols)
+            formula=formula.replace(wildcard, all_cols)
+        
+        return formula
+
+    @staticmethod
+    def get_formula_cols(formula, df, target_val=False, feature_vals=False):
+        if target_val:
+            formula = formula.split("~")[0]
+        if feature_vals:
+            formula = formula.split("~")[1]
+        # test just the first 2 datapoints so it runs quicker?
+        df = df.sample(2)
+        cols = []
+        for col in df.columns:
+
+            try:
+                if target_val | feature_vals:
+                    tmp_mod = patsy.dmatrix(formula, df.drop(col, axis=1))
+                else:
+                    tmp_mod = patsy.dmatrices(formula, df.drop(col, axis=1))
+
+            except:
+                cols.append(col)
+        return cols
+
+
     def transform(self, X):
         X = X.copy()
         if not self.handle_na is None: X = self.handle_na.transform(X)
@@ -355,7 +433,7 @@ class MakeFormula(BaseEstimator, TransformerMixin):
             X_transform = patsy.build_design_matrices([self.X], X, return_type=self.return_type)[0]
             y_transform = patsy.build_design_matrices([self.y], X, return_type=self.return_type)[0]
 
-            ans = [y_transform, X_transform]
+            ans = (y_transform, X_transform)
         
         elif self.return_X:
             X_transform = patsy.build_design_matrices([self.X], X, return_type=self.return_type)[0]
