@@ -42,6 +42,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, On
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
+from sklearn.compose import TransformedTargetRegressor
 
 # Scoring
 from sklearn import metrics
@@ -104,10 +105,13 @@ class Model:
     
     '''
 
-    def __init__(self, df=None, formula=None, target=None, model=RandomForestRegressor(), test_split=.2, random_state=42, handle_na=True,preprocessor=True, title="My Report", description="N/A", analyst="N/A", **kwargs):
+    def __init__(self, df=None, formula=None, target=None, model=RandomForestRegressor(),y_transform=lambda x: x, y_inverse = lambda x:x, test_split=.2, random_state=42, handle_na=True,preprocessor=True, title="Generic Report Title", description="N/A", analyst="N/A", **kwargs):
         # Get attributes
         self._meta_data = dict(title = title,description= description,analyst = analyst, **kwargs)
         #self._meta_data = dict(**meta_data, **kwargs)
+        self.y_transform = y_transform
+        self.y_inverse = y_inverse
+        
 
         # allow user to load data from file
         if df is None:
@@ -140,6 +144,11 @@ class Model:
         # , return_type='dataframe')
         #self.y, self.X = patsy.dmatrices(formula, self.df)
         self.y =  process.MakeFormula(self.formula, handle_na=self.handle_na,return_X=False,return_y=True, return_type='dataframe').fit_transform(self.df)
+        # check transform
+        if all(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y) > .0001): 
+            print("WARNING!!!! y transform and y_inverse are not correct")
+            print("Average Abs Error",np.mean(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y)) )
+
         self.X = self.df
         if (test_split > 0.0) & (test_split < 1.0):
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -202,7 +211,7 @@ class Model:
         X = self.X_train
         y = self.y_train
         start_time = timeit.default_timer()
-        self.model = self.model.fit(X, y)
+        self.model = self.model.fit(X, self.y_transform(y))
         self.run_time = timeit.default_timer() - start_time
         return self
 
@@ -214,7 +223,30 @@ class Model:
         else:
             X = df.copy()
 
-        return self.model.predict(X)
+        return self.y_inverse(self.model.predict(X))
+
+    
+
+    def get_transformed_x(self, X=None):
+        if X is None: X = self.X
+        if isinstance(self.model, Pipeline):
+            return self.get_pipeline(self.model).transform(X)
+        else:
+            return X
+
+    
+    @staticmethod
+    def get_pipeline(pipe):
+        if isinstance(pipe, Pipeline):
+            new_pipe = []
+            for step in pipe.steps:
+                if hasattr(step[1], 'transform'):
+                    new_pipe.append((step[0], step[1]))
+                else:
+                    hasattr(step[1], 'predict')
+                    return Pipeline(new_pipe)
+            return Pipeline(new_pipe)
+
 
     @staticmethod
     def stats(model, X_test, y_test, X_train=None, y_train=None):
@@ -405,6 +437,49 @@ class Model:
         return dfs
 
     @staticmethod
+    def find_column_names(model, X):
+        coef_names = None
+        n = len(model) -1
+        for i in range(n):
+            try:
+                tmp_pipe = model[0:n-i]
+                if isinstance(tmp_pipe,ColumnTransformer):
+                    print('need to implmeent columntransformer')
+                    coef_names = [*[p.get_features_names() for p in tmp_pipe]]
+                else:
+                    coef_names = tmp_pipe.transform(X).columns.to_list()
+    
+                return coef_names
+
+            except:
+                pass
+        return coef_names
+    
+    def model_coefs(self):
+        return self.get_coefs(self.model, self.X)
+
+    @staticmethod
+    def get_coefs(model=None, X=None):        
+        '''
+        Given a pipeline model attempt find column names and coefs
+
+        PARAMS:
+            model (sklearn.pipeline): model object
+            X (pd.DataFrame): dataframe used to train model
+        '''
+        coef_names = Model.find_column_names(model, X)
+        try:
+            # make generic model[len(model)].coef_
+            regressor  = model[len(model)-1]
+            coefs = [regressor.intercept_, *regressor.coef_]
+            coef_df = pd.DataFrame(columns =['Intercept', *coef_names])
+            df.loc[0] = coefs 
+            return coef_df
+        except:
+            print('could not find coefficients')
+            return pd.DataFrame()
+
+    @staticmethod
     def open_data():
         '''
         Function Returns a dataframe
@@ -451,14 +526,103 @@ class Model:
                 cols.append(col)
         return cols
 
+    def model_show_transformation(self):
+        Model.show_transformation(self.model, self.df)
+
+    @staticmethod
+    def show_transformation(pipeline, df):
+        results = dict()
+        tmp_df = df.copy()
+        cols = df.columns
+        for step in pipeline.steps:
+            if isinstance(step[1], Pipeline):
+                show_transformation(step[1], tmp_df)
+            else:
+
+                tmp_df = step[1].transform(tmp_df)
+                try:
+                    cols = tmp_df.columns
+                except:
+                    pass
+                
+                results[step[0]] = pd.DataFrame(tmp_df, columns = cols).head()
+                print(step[0])
+                print(pd.DataFrame(tmp_df, columns = cols).head())
+        return results
 
 class LC_Model(Model):
-    def __init__(self, quantity, Lot, grp_cols=[], model=RidgeCV(), First=None, Last=None, unit_no=None,  **kwargs):
-        super().__init__(**kwargs)
+    '''
+    Notes:
+        
+
+    '''
+    def __init__(self, df,x_formula='`',AUC_col='auc',quantity_column='Qty', lot_order_cols=['FY'], grp_cols=[], model=RidgeCV(), First=None, Last=None, unit_no=None,y_transform=np.log, y_inverse=np.exp,  **kwargs):
+        
+        super().__init__(df=df,formula=f"{AUC_col} ~ {x_formula}", model=model,**kwargs)
+
+        prep_LC = process.LC_Lot_Midpoint(meta_columns=grp_cols, lot_order_columns=lot_order_cols, quantity_column=quantity_column, priors_column='priors', lc_slope=1)
+        new_formula = f"{AUC_col} ~ np.log(lot_midpoint) + np.log(lot_qty) -1 + {x_formula}"
+        
+        self.model.steps.insert(1,('prep_LC', prep_LC))
+        self.model.set_params(formula__formula = new_formula)
+        self.lc_model = TransformedTargetRegressor(self.model, func=np.log, inverse_func=np.exp)
+
+
+        # Not very elegant, but need to reassign df, y,X 
+        self.df = df
+
+        # get y, X to fit data on
+        # , return_type='dataframe')
+        #self.y, self.X = patsy.dmatrices(formula, self.df)
+        #self.y =  process.MakeFormula(new_formula, handle_na=self.handle_na,return_X=False,return_y=True, return_type='dataframe').fit_transform(self.df)
+        self.X = self.df
+        if (self.test_split > 0.0) & (self.test_split < 1.0):
+            self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+                self.X, self.y, test_size=self.test_split, random_state=self.random_state)
+        else:
+            self.X_train, self.X_test, self.y_train, self.y_test = (
+                self.X, self.X, self.y, self.y )
+
         # Calculate midpoint
         # create model
 
         # Add midpoint to analysis data frame
+    def fit(self):
+        #self.model.fit(self.X_train, self.y_train)
+        start_time = timeit.default_timer()
+        slope = 1
+        fit_slope =0
+        cnt = 0
+        while cnt <= 10:
+            cnt= cnt+1            
+            self.model.set_params(prep_LC__lc_slope=slope)
+            self.model.fit(self.X_train,  np.log(self.y_train))#,
+            
+            self.lc_model.regressor.set_params(prep_LC__lc_slope=slope) 
+            self.lc_model.fit(self.X_train, self.y_train)#, regressor__prep_LC__lc_slope=slope)
+            fit_slope = 2**(self.lc_model.regressor_['model'].coef_[0])
+            print("iteration:", cnt,":", fit_slope)
+            if np.abs(slope-fit_slope) <=.0000001:
+                break
+            else:
+                slope = fit_slope
+        self.run_time = timeit.default_timer() - start_time
+        return self
+
+    def predict(self, df=None, X=None):
+
+        if df is None:
+            if X is None:
+                X = self.X
+        else:
+            X = df.copy()
+
+        return np.exp(self.model.predict(X))
+    
+    #def model_coefs(self):
+    #    return Model.get_coefs_(self.lc_model.regressor_, self.X)
+
+        
 
 
 class Models:
@@ -478,7 +642,7 @@ class Models:
                                                                         cv=5),
                                                                     RidgeCV(
                                                                         cv=5),
-                                                                    ElasticNetCV(cv=5)], test_split=.2, random_state=42, meta_data=dict(title="My Report", desc="N/A", analyst="N/A"), tags={}, **kwargs):
+                                                                    ElasticNetCV(cv=5)], **kwargs):
 
 
         # Initialize Models Variables
@@ -529,7 +693,7 @@ class Models:
                                                                             cv=5),
                                                                         RidgeCV(
                                                                             cv=5),
-                                                                        ElasticNetCV(cv=5)], test_split=.2, random_state=42, meta_data=dict(title="My Report", desc="N/A", analyst="N/A"), tags={}, **kwargs):
+                                                                        ElasticNetCV(cv=5)], **kwargs):
 
         df = df.copy()
         if type(formulas) != list:
@@ -577,29 +741,33 @@ class Models:
 
                     if by == ["GROUP_COLUMN"]:
                         tmp_by = []
+                        tmp_meta = []
                     else:
                         tmp_by = by
-                    tmp_model = Model(df=frame, formula=f, model=mod, **
-                                      kwargs, **{col: meta for col, meta in zip(by, meta)})
+                        tmp_meta = meta
+                    
+                   
 
                     self.Models[i] = Model(
-                        df=frame, formula=f, model=mod, **kwargs, **{col: meta for col, meta in zip(by, meta)})
+                        df=frame, formula=f, model=mod, **kwargs, 
+                        **{col: meta for col, meta in zip(by, *[tmp_meta] if len(tmp_meta)>1 else [tmp_meta])}
+                        )
                     _model_specs[i] = dict(
-                        **meta_data,
-                        **tags,
-                        **{col: meta for col, meta in zip(by, meta)},
+                        **{**self.Models[i]._meta_data, **kwargs},
+                        #**kwargs,
                         Formula=f,
                         ModelType=mod.__repr__(),
-                        Model=Model(df=frame, formula=f, model=mod, **kwargs,
-                                    **{col: meta for col, meta in zip(by, meta)}),
+                        Model=self.Models[i],
                         Target=self.Models[i].target_cols,
                         Features=self.Models[i].feature_cols,
                         AnalysisColumns=self.Models[i].analysis_cols,
-                        BY=tmp_by
+                        BY=tmp_by,
+                        BY_META = [*tmp_meta]
+                        #**{col: meta for col, meta in zip(tmp_by, *[tmp_meta] if len(tmp_meta)>1 else [tmp_meta] )}
                         # IsFitted=False
-
-
                     )
+
+                    
 
                     #_models[f'UID: {i}'] = Model(df=frame,fromula=f, model=mod, **kwargs)
 
@@ -736,8 +904,10 @@ class Models:
         for index, row in self.db.iterrows():
             mod = row.Model
             try:
-                summary = mod.fit().summary()
-                #summary = mod.summary()
+                try:
+                    summary = mod.summary()
+                except:
+                    summary = mod.fit().summary()
                 summary.index = [index]
             except:
                 summary = pd.DataFrame({'FitError':[True]}, index=[index])
@@ -941,7 +1111,7 @@ class AutoRegressionLinear(BaseEstimator):
         model_pipeline_steps.append(('CheckFeatures', process.FeatureCheck() ))
         model_pipeline_steps.append(('dateFeatures',date_pipeline))
         model_pipeline_steps.append(('preprocessor', preprocessor))
-        #model_pipeline_steps.append(('pca', PCA(svd_solver = 'full')))
+        #model_pipeline_steps.append(('pca', PCA(.9,svd_solver = 'full')))
         model_pipeline_steps.append(('feature_selector', SelectKBest(f_regression, k='all')))
         model_pipeline_steps.append(('estimator', LinearRegression()))
         model_pipeline = Pipeline(model_pipeline_steps)
@@ -955,7 +1125,7 @@ class AutoRegressionLinear(BaseEstimator):
         optimization_grid.append({
             'preprocessor__numerical__scaler': [RobustScaler(), StandardScaler(), MinMaxScaler()],
             'preprocessor__numerical__cleaner__strategy': ['mean', 'median'],
-            #'pca__n_components': range(0.7,0.95,0.05),
+            #'pca__n_components': np.arange(0.7,0.95,0.05),
             'feature_selector__k': list(np.arange(1, total_features, feature_incr)) + ['all'],
             'estimator': [LinearRegression()]
         })
@@ -988,6 +1158,8 @@ class AutoRegressionLinear(BaseEstimator):
         self.best_estimator_ = search.best_estimator_
         self.best_pipeline = search.best_params_
         return self
+    
+
 
     def predict(self, X, y=None):
         return self.best_estimator_.predict(X)

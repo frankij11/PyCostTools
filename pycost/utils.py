@@ -112,8 +112,7 @@ class CostTools:
     def stack_fys(self, fy_name="FY"):
         return stack_fys(self.df,fy_name)
 
-# %%
-#df.ct.select("everything - Version")
+
 # %%
 def get_fys(df, FY:str='FY|FiscalYear|Fiscal Year|Fiscal_Year'):
 

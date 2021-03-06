@@ -448,6 +448,80 @@ class MakeFormula(BaseEstimator, TransformerMixin):
 
         return ans
 
+class LC_Lot_Midpoint(BaseEstimator, TransformerMixin):
+    '''
+    routine to automatically calculate First Unit, Last Unit, MidpointQty
+    '''
+
+    def __init__(self, meta_columns=[], lot_order_columns=['FiscalYear'], quantity_column='value', priors_column = None, lc_slope=1, lot_qty_col ='lot_qty', lot_midpoint_col='lot_midpoint'):
+        self.meta_columns = meta_columns
+        self.lot_order_columns = lot_order_columns
+        self.quantity_column = quantity_column
+        self.priors_column = priors_column
+        self.lc_slope = lc_slope
+        self.lot_qty_col = lot_qty_col
+        self.lot_midpoint_col = lot_midpoint_col
+
+    def fit(self, X,y=None):
+
+        # Nothing to do...maybe store priors?
+        
+        return self
+    
+
+    def transform(self,X):
+        df = X.copy()
+        df = self.lc_prep(
+            df = df,
+            cols = [*self.meta_columns, *self.lot_order_columns], 
+            val=self.quantity_column,
+            priors_column= self.priors_column,
+            lc_slope = self.lc_slope,
+            lot_qty_col=self.lot_qty_col,
+            lot_midpoint_col=self.lot_midpoint_col ) 
+        return df
+
+    @staticmethod
+    def lc_prep(df, cols, val= "value",priors_column=None, lc_slope=1, lot_qty_col='lot_qty', lot_midpoint_col='lot_midpoint'):
+        
+
+        if pd.__version__ >= '1.0':
+            lc =df.groupby(cols)[val].agg(share_qty = 'sum').reset_index()
+            lc = lc.rename(columns = {'share_qty': lot_qty_col})
+        else:
+            lc = df.groupby(cols)[val].agg(sum).reset_index()
+            lc = lc.rename(columns={val:lot_qty_col})
+        if len(cols) >1:
+            lc["Last"] = lc.groupby(cols[:-1])[lot_qty_col].cumsum()
+        else:
+            lc['Last'] = lc[lot_qty_col].cumsum()
+        lc["First"] = lc["Last"] - lc[lot_qty_col] + 1
+        lc[lot_midpoint_col] = np.nan # wait to calculate until we havea priors columns
+
+        lc = lc[cols+ ['First', 'Last', lot_midpoint_col, lot_qty_col]]
+        lc = pd.merge(df,lc,how='left', on=cols,sort=False, suffixes=("_orig", ""))
+
+        if priors_column is None:
+            priors = 0
+        else:
+            priors = lc[priors_column]
+
+        lc['Last'] = lc['Last'] + priors
+        lc['First'] = lc['First'] + priors
+        lc[lot_midpoint_col] = LC_Lot_Midpoint.lc_midpoint(lc["First"], lc["Last"], lc_slope)
+
+        return lc
+
+    @staticmethod
+    def lc_midpoint(first,last, lc_slope):
+        b = np.log(lc_slope)
+        if b == 0:
+            return (first+last + 2 *(first*last)**.5)/4
+        else:
+            midpoint = ((1 / (last - first + 1)) * ((((last + 0.5) ** (1 + b)) - ((first - 0.5) ** (1 + b))) / (1 + b))) ** (1 / b)
+            return midpoint
+
+
 class CategoricalEncoder(BaseEstimator, TransformerMixin):
     """String to numbers categorical encoder."""
 
