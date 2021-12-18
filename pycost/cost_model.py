@@ -1,6 +1,132 @@
 import pandas as pd
 import param
 
+class GlobalInputs(param.Parameterized):
+    BY = param.Integer(2020)
+    
+
+
+class Model(param.Parameterized):
+    meta = param.Dict(
+        default = {'Analyst': "N/A",
+                  'Estimate': "N/A",
+                  }
+    )
+    g_inputs = param.ClassSelector(GlobalInputs, GlobalInputs(), instantiate=False)
+    u_inputs = param.Dict()
+    results = param.DataFrame(
+        default = pd.DataFrame(columns =['Commodity', 'APPN','Inflation', 'Methodology', 'DataSource','BaseYear', 'FY','Value']),
+        doc = '''Results container shared by all estimates. This value should be updated using the generic _calc method''',
+        columns = set(['Commodity', 'APPN','Inflation', 'Methodology', 'DataSource','BaseYear', 'FY','Value'])
+    )
+    sim_results = param.List()
+    
+    def __init__(self, **params):
+        super().__init__(**params)
+        # Automatically set results to a calculation given defaults
+        self._calc()
+
+    def _calc():
+        print(self.meta['Estimate'], "Not Implement")
+        self.results = self.results
+    
+    def _prepare_sim(self):
+        if self.u_inputs is not None: 
+            self.param.set_param(**self.u_inputs)
+        
+    def _end_sim(self):
+        if self.u_inputs is not None:
+            for key,val in self.u_inputs.items():
+                self.param.set_param(**{key: self.param[key].default})
+        self._calc()
+    
+    def run_simulation(self, trials=100,clear_previous_sim=True, agg_results = True, agg_columns=['APPN', 'FY']):
+        self._prepare_sim()
+        if clear_previous_sim: self.sim_results =[]
+        for i in range(trials):
+            self._prepare_sim()
+            self._calc()
+            if agg_results:
+                self.sim_results.append(self.results.groupby(by=agg_columns )['Value'].sum().reset_index().assign(Trial=i))
+            else:
+                self.sim_results.append(self.results.assign(Trial=i))
+        self._end_sim()
+    def run_simulation_parallel(self, trials=100, agg_results=True, agg_columns=['APPN', 'FY']):
+        import multiprocessing
+        with multiprocessing.Pool() as pool:
+            pool.map(self.run_simulation, range(len(self.models)))
+    
+class Models(Model):
+    
+    
+    models = param.List()
+    
+    def _calc(self, run_parallel=False):
+        results = []
+        if run_parallel:
+            import multiprocessing
+            with multiprocessing.Pool() as pool:
+                pool.map(self._calc_model, range(len(self.models)))
+        else:
+            
+            for model in self.models:
+                model._calc()
+                results.append(model.results.assign(ModelType = type(model).__name__))
+        
+            if len(results) >0: self.results = pd.concat(results, ignore_index=True)
+        
+    def _calc_model(self, i):
+        self.models[i]._calc()
+    
+    def _add_model(self, model):
+        #for new_param in model.param
+            #self.
+            #self.param.watch(self._calc, ['a'], queued=True, precedence=2)
+        self.models.append(model)
+        self._calc()
+    
+    def _prepare_sim(self):
+        if self.u_inputs is not None:
+            self.param.set_param(**self.u_inputs)
+        for model in self.models:
+            model._prepare_sim()
+        
+    def _end_sim(self):
+        if self.u_inputs is not None:
+            for key,val in self.u_inputs.items():
+                self.param.set_param(**{key: self.param[key].default})
+        
+        for model in self.models:
+            model._end_sim()
+        self._calc()
+
+    
+    
+class Inventory(param.Parameterized):
+    db = param.DataFrame(default = pd.read_csv('SBP_DB.csv').assign(value=1).query('Procurement != "#VALUE!"') ,
+                         columns = set(["Category", "Type", "Class", "Hull", "Procurement", "Delivery", "Retirement"]), instantiate=True)
+    proc = param.DataFrame()
+    inv = param.DataFrame()
+    
+    def __init__(self, **params):
+        super().__init__(**params)
+        # Automatically set results to a calculation given defaults
+        self._calc()
+        
+    
+    def _calc(self):
+        self._update_tables()
+    
+    @param.depends('db', watch=True)
+    def _update_tables(self):
+        #print('updating inventory tables')
+        meta = [col for col in self.db.columns if col not in ['Retirement', 'Procurement', 'Delivery'] ]
+        self.proc = self.db.assign(FY=lambda x: x.Procurement, value= 1)[['Class', 'FY', 'value']].groupby(['Class', 'FY']).count().reset_index()
+        self.inv = self.db.groupby([*meta, 'Retirement']).count().reset_index()
+
+
+
+
 class BaseModel(param.Parameterized):
     '''
     Base model for building a cost estimate. Similar to an
