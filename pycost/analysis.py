@@ -1,5 +1,5 @@
 # my modules
-from pycost import process
+from pycost import learn, process
 
 # utils
 from datetime import datetime
@@ -43,7 +43,7 @@ from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.compose import TransformedTargetRegressor
-
+from sklearn.base import BaseEstimator, RegressorMixin
 # Scoring
 from sklearn import metrics
 from sklearn.model_selection import cross_val_score  # Cross validated score
@@ -52,7 +52,7 @@ from sklearn.model_selection import cross_val_score  # Cross validated score
 from sklearn.utils.validation import check_is_fitted
 
 
-__all__ = ["Model", "Models", "AutoRegressionTrees", "AutoRegressionLinear"]
+__all__ = ["Model","LC_Model", "Models","LC_Models", "AutoRegressionTrees", "AutoRegressionLinear"]
 
 class Model:
     # issues:
@@ -125,8 +125,8 @@ class Model:
 
             # Start Feature selection routine
             # Implement pipeline to Add Features / Remove Features
-            formula = f"Q('{target}') ~ ^ "
-
+            formula = f"Q('{target}') ~ ` "
+        self.formula = process.MakeFormula.parse_formula_wildcard(formula, self,df)
         self.analysis_cols = self.get_formula_cols(formula, df)
         self.target_cols = self.get_formula_cols(formula, df, target_val=True)
         self.feature_cols = self.get_formula_cols(formula, df, feature_vals=True)
@@ -145,7 +145,7 @@ class Model:
         #self.y, self.X = patsy.dmatrices(formula, self.df)
         self.y =  process.MakeFormula(self.formula, handle_na=self.handle_na,return_X=False,return_y=True, return_type='dataframe').fit_transform(self.df)
         # check transform
-        if all(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y) > .0001): 
+        if all(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y) <= .0001): 
             print("WARNING!!!! y transform and y_inverse are not correct")
             print("Average Abs Error",np.mean(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y)) )
 
@@ -207,12 +207,18 @@ class Model:
         self.__dict__ = d
         #self.y,self.X = patsy.dmatrices(self.formula, self.df)
 
-    def fit(self):
-        X = self.X_train
-        y = self.y_train
+    def fit(self, X=None,y=None, **fit_params):
+        if X is None: X = self.X_train
+        if y is None: y = self.y_train
+
         start_time = timeit.default_timer()
+        # start  fit routine
+
         self.model = self.model.fit(X, self.y_transform(y))
+
+        # end fit routine
         self.run_time = timeit.default_timer() - start_time
+
         return self
 
     def predict(self, df=None, X=None):
@@ -556,12 +562,20 @@ class LC_Model(Model):
         
 
     '''
-    def __init__(self, df,x_formula='`',AUC_col='auc',quantity_column='Qty', lot_order_cols=['FY'], grp_cols=[], model=RidgeCV(), First=None, Last=None, unit_no=None,y_transform=np.log, y_inverse=np.exp,  **kwargs):
+    learn_formula = 'np.log(lot_midpoint)'
+    rate_formula = 'np.log(lot_qty)'
+    def __init__(self, df,x_formula='',AUC_col='auc',quantity_column='Qty', lot_order_cols=['FY'], grp_cols=[], model=RidgeCV(), First=None, Last=None, unit_no=None,y_transform=np.log, y_inverse=np.exp,  **kwargs):
         
-        super().__init__(df=df,formula=f"{AUC_col} ~ {x_formula}", model=model,**kwargs)
+
+        super().__init__(df=df,formula=f"{AUC_col} ~ `", model=model,y_transform=np.log, y_inverse=np.exp,**kwargs)
 
         prep_LC = process.LC_Lot_Midpoint(meta_columns=grp_cols, lot_order_columns=lot_order_cols, quantity_column=quantity_column, priors_column='priors', lc_slope=1)
-        new_formula = f"{AUC_col} ~ np.log(lot_midpoint) + np.log(lot_qty) -1 + {x_formula}"
+        if x_formula == "":
+            new_formula = f"{AUC_col} ~  {self.learn_formula} + {self.rate_formula} -1"
+        elif x_formula[0] in (":", "*", "-", "+"):
+            new_formula = f"{AUC_col} ~  {self.learn_formula} + {self.rate_formula}{x_formula} -1"
+        else:
+            new_formula = f"{AUC_col} ~  {self.learn_formula} + {self.rate_formula}+ {x_formula} -1"
         
         self.model.steps.insert(1,('prep_LC', prep_LC))
         self.model.set_params(formula__formula = new_formula)
@@ -621,9 +635,6 @@ class LC_Model(Model):
     
     #def model_coefs(self):
     #    return Model.get_coefs_(self.lc_model.regressor_, self.X)
-
-        
-
 
 class Models:
     '''
@@ -962,8 +973,7 @@ class AutoPipeline:
 
         return preprocessor
 
-
-class AutoRegressionTrees:
+class AutoRegressionTrees(BaseEstimator,RegressorMixin):
     def __init__(self, scoring_function='neg_mean_squared_error', n_iter=50) -> None:
         self.scoring_function = scoring_function
         self.n_iter = n_iter
@@ -1060,7 +1070,7 @@ class AutoRegressionTrees:
         return Model.stats(self.X_test, self.y_test, self.X_train, self.y_train)
 
 
-class AutoRegressionLinear(BaseEstimator):
+class AutoRegressionLinear(BaseEstimator,RegressorMixin):
     def __init__(self, scoring_function='neg_mean_squared_error', n_iter=50):
         self.scoring_function = scoring_function
         self.n_iter = n_iter
