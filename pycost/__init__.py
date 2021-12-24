@@ -8,3 +8,5 @@ from .inflation import *
 from .learn import *
 from .analysis import *
 
+import pycost.cost_model
+

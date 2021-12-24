@@ -26,7 +26,7 @@ class Model(param.Parameterized):
         # Automatically set results to a calculation given defaults
         self._calc()
 
-    def _calc():
+    def _calc(self):
         print(self.meta['Estimate'], "Not Implement")
         self.results = self.results
     
@@ -100,44 +100,18 @@ class Models(Model):
             model._end_sim()
         self._calc()
 
-    
-    
-class Inventory(param.Parameterized):
-    db = param.DataFrame(default = pd.read_csv('SBP_DB.csv').assign(value=1).query('Procurement != "#VALUE!"') ,
-                         columns = set(["Category", "Type", "Class", "Hull", "Procurement", "Delivery", "Retirement"]), instantiate=True)
-    proc = param.DataFrame()
-    inv = param.DataFrame()
-    
-    def __init__(self, **params):
-        super().__init__(**params)
-        # Automatically set results to a calculation given defaults
-        self._calc()
-        
-    
-    def _calc(self):
-        self._update_tables()
-    
-    @param.depends('db', watch=True)
-    def _update_tables(self):
-        #print('updating inventory tables')
-        meta = [col for col in self.db.columns if col not in ['Retirement', 'Procurement', 'Delivery'] ]
-        self.proc = self.db.assign(FY=lambda x: x.Procurement, value= 1)[['Class', 'FY', 'value']].groupby(['Class', 'FY']).count().reset_index()
-        self.inv = self.db.groupby([*meta, 'Retirement']).count().reset_index()
-
-
-
 
 class BaseModel(param.Parameterized):
     '''
     Base model for building a cost estimate. Similar to an
     empty worksheet. All other models should extend this class
     '''
-    meta= param.Dict(
+    meta= param.Dict(dict(
         Analyst = param.String("Uknown"),
-        WBS = param.string('Uknown') 
-        )
+        WBS = param.String('Uknown') 
+        ))
 
-    inputs = Inputs()
+    inputs = GlobalInputs()
 
     estimate= param.DataFrame(
         default = pd.DataFrame(columns =["Element", "units","FY", "Value"] ), columns=set(["Element", "units","FY", "Value"]))
@@ -177,11 +151,11 @@ class CostModel(BaseModel):
     Collection of estimates, similar to a workbook in Excel
     '''
     inputs = param.Dict()
-    global_inputs = param.Dict(
+    global_inputs = param.Dict(dict(
         ProgramName = param.String("NA"),
         BY = param.Integer(2020, bounds=(1970,2060) ),
         EstimateName= param.String("NA")
-        )
+        ))
     models=param.Dict()
     
 
@@ -237,7 +211,8 @@ class Factor(BaseModel):
 
 
 if __name__ =="__main__":
-    GlobalInputs = Inputs()
-    CostEstimate = CostModel(meta={'Author':"Kevin Joy"})
-    CostEstimate.predict(inputs = GlobalInputs)
+    pass
+    #GlobalInputs = Inputs()
+    #CostEstimate = CostModel(meta={'Author':"Kevin Joy"})
+    #CostEstimate.predict(inputs = GlobalInputs)
 # %%

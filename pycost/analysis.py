@@ -925,6 +925,9 @@ class Models:
             results.append(summary)
         return pd.concat(results) 
 
+class LC_Models:
+    pass
+
 class AutoPipeline:
     def __init__(
             self, df=None, formula=None, target=None, test_split=.2, random_state=42,
