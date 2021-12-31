@@ -1,5 +1,8 @@
 import pandas as pd
+import numpy as np
 import param
+import numbergen as ng
+import scipy.stats
 
 class GlobalInputs(param.Parameterized):
     BY = param.Integer(2020)
@@ -9,27 +12,41 @@ class GlobalInputs(param.Parameterized):
 class Model(param.Parameterized):
     meta = param.Dict(
         default = {'Analyst': "N/A",
-                  'Estimate': "N/A",
+                  'Element': "N/A",
                   }
     )
     g_inputs = param.ClassSelector(GlobalInputs, GlobalInputs(), instantiate=False)
-    u_inputs = param.Dict()
+    u_inputs = param.Dict(
+        default= {
+            'uncertainty': ng.NormalRandom(mu=1,sigma=.25)
+            } )
+    uncertainty = param.Number(1)
+    simulate = param.Action( lambda self: self.run_simulation(100))
     results = param.DataFrame(
-        default = pd.DataFrame(columns =['Commodity', 'APPN','Inflation', 'Methodology', 'DataSource','BaseYear', 'FY','Value']),
+        default = pd.DataFrame(columns =['Element','APPN', 'BaseYear', 'FY','Value']),
         doc = '''Results container shared by all estimates. This value should be updated using the generic _calc method''',
-        columns = set(['Commodity', 'APPN','Inflation', 'Methodology', 'DataSource','BaseYear', 'FY','Value'])
+        columns = set(['Element', 'APPN', 'BaseYear', 'FY','Value']),
+        precedence=.1
     )
-    sim_results = param.List()
-    
+    sim_results = param.DataFrame(precedence=.1)
+
+
+
     def __init__(self, **params):
         super().__init__(**params)
         # Automatically set results to a calculation given defaults
         self._calc()
 
+
     def _calc(self):
-        print(self.meta['Estimate'], "Not Implement")
+        print(self.name, "Not Implement")
         self.results = self.results
     
+    @param.depends('results', watch=True)
+    def _update_results(self):
+        self.results['Value'] = self.results['Value'] * self.uncertainty
+
+
     def _prepare_sim(self):
         if self.u_inputs is not None: 
             self.param.set_param(**self.u_inputs)
@@ -42,19 +59,33 @@ class Model(param.Parameterized):
     
     def run_simulation(self, trials=100,clear_previous_sim=True, agg_results = True, agg_columns=['APPN', 'FY']):
         self._prepare_sim()
-        if clear_previous_sim: self.sim_results =[]
+        if clear_previous_sim: self.sim_results =pd.DataFrame()
         for i in range(trials):
             self._prepare_sim()
             self._calc()
             if agg_results:
-                self.sim_results.append(self.results.groupby(by=agg_columns )['Value'].sum().reset_index().assign(Trial=i))
+                self.sim_results = self.sim_results.append(self.results.groupby(by=agg_columns )['Value'].sum().reset_index().assign(Trial=i))
             else:
-                self.sim_results.append(self.results.assign(Trial=i))
+                self.sim_results = self.sim_results.append(self.results.assign(Trial=i))
         self._end_sim()
     def run_simulation_parallel(self, trials=100, agg_results=True, agg_columns=['APPN', 'FY']):
         import multiprocessing
         with multiprocessing.Pool() as pool:
             pool.map(self.run_simulation, range(len(self.models)))
+    
+    
+    def build_panel_app(self):
+        self.app = pn.Pane(self)
+        
+    def build_app(self):
+        try:
+            import panel
+            self._build_panel()
+        except:
+            try:
+                import ipywidets
+            except:
+                print("No dashboard apps available. Try downloading panel or ipywidgets")
     
 class Models(Model):
     
@@ -163,9 +194,6 @@ class CostModel(BaseModel):
 
 
 # %%
-import param
-import pandas as pd
-import numpy as np
 class QuantiyInputs(param.Parameterized):
     procurement = param.DataFrame(pd.DataFrame(columns = ["FY", "Value"]), columns = set(["FY", "Value"]))
     delivery_cycle = param.Integer(2)
@@ -200,11 +228,32 @@ class EVM(BaseModel):
     '''
     pass
 
-class LearningCurve(BaseModel):
+class LearningCurve(Model):
     '''
     Structure to develop manufacturing estimate
     '''
-    pass
+    T1 = param.Number(100)
+    LC = param.Number(.95, bounds=(.7,1))
+    RC = param.Number(.95, bounds=(.7,1))
+    QtyProfile = param.DataFrame(pd.DataFrame(dict(
+        FY = [2020]*10 + [2021]*20 + [2022]*15 + [2023] *5,
+        Qty = np.arange(50) +1,
+        Rate = [10]*10 + [20]*20 + [15]*15 +[5]*5
+    )))
+
+    @param.depends('T1', 'LC', 'RC', 'QtyProfile', watch=True)
+    def _calc(self):
+        n = self.QtyProfile.shape[0]
+        tmp = self.QtyProfile.assign(
+            Element = ['Learn'] * n,
+            APPN = ['APN'] * n,
+            BaseYear = [2020] * n
+             
+        ).assign(
+            Value = lambda x: self.T1 * (x.Qty **(np.log(self.LC))) * (x.Rate**(np.log(self.RC)))
+        )
+        self.results= tmp
+
 
 class Factor(BaseModel):
     pass

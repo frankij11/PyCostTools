@@ -324,8 +324,9 @@ class MakeFormula(BaseEstimator, TransformerMixin):
     
     """
     
-    def __init__(self,formula='`', handle_na=ImputeNA(),return_type='dataframe',keep_cols="all", return_X=True,return_y=False):
+    def __init__(self,formula='`', handle_na=ImputeNA(),return_type='dataframe',keep_cols="all", return_X=True,return_y=False, wildcard="`"):
         self.formula = formula
+        self.wildcard = wildcard
         
         self.handle_na=handle_na
         if self.handle_na==False: self.handle_na = None
@@ -358,7 +359,7 @@ class MakeFormula(BaseEstimator, TransformerMixin):
         if not self.handle_na is None: self.handle_na.fit(X)
 
         # replace wildcard in formula
-        self.formula = self.parse_formula_wildcard(self.formula, X, wildcard="`")
+        self.formula = self.parse_formula_wildcard(self.formula, X, wildcard=self.wildcard)
                 
         # parse formula
         self.split_formula = self.formula.split("~")

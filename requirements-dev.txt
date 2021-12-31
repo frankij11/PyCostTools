@@ -1,2 +1,3 @@
 nbdev
 pdoc
+ipykernel

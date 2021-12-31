@@ -61,7 +61,7 @@ if __name__ =='__main__':
     xdata = pd.DataFrame({'midpoint': np.arange(1,11), 'QTY': np.random.uniform(1,30,size=10)})
     y = LearnCurve.func(xdata, 100, .95, .83)
     np.random.seed(1729)
-    y_noise =  np.random.normal(1, .05, size=xdata.shape[0])
+    y_noise =  np.random.normal(1, .10, size=xdata.shape[0])
     ydata = y * y_noise
     
     LC = LearnCurve()

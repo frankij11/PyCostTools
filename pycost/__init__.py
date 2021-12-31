@@ -3,10 +3,11 @@
 #print(my_data)
 
 
-from .utils import *
-from .inflation import *
-from .learn import *
-from .analysis import *
+import pycost.utils
+import pycost.inflation
+import pycost.learn
+import pycost.analysis 
 
 import pycost.cost_model
+import pycost.sim_tool
 

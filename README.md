@@ -12,5 +12,5 @@ pip install git+https://github.com/frankij11/PyCostTools.git#egg=pycost
 
 ```Python
 import pycost as ct
-ct.BYtoBY(Index = "APN", FromYR = 2020, ToYR = 2025, Cost = 1)
+ct.inflation.BYtoBY(Index = "APN", FromYR = 2020, ToYR = 2025, Cost = 1)
 ```
