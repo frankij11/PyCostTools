@@ -1,7 +1,0 @@
-{
-    "python.pythonPath": ".env\\dev\\Scripts\\python.exe",
-    "editor.formatOnPaste": true,
-    "editor.formatOnSave": true,
-    "editor.minimap.enabled": false,
-    "python.languageServer": "Pylance"
-}
