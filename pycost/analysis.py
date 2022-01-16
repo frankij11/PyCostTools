@@ -126,7 +126,7 @@ class Model:
             # Start Feature selection routine
             # Implement pipeline to Add Features / Remove Features
             formula = f"Q('{target}') ~ ` "
-        self.formula = process.MakeFormula.parse_formula_wildcard(formula, self,df)
+        self.formula = process.MakeFormula.parse_formula_wildcard(formula, df)
         self.analysis_cols = self.get_formula_cols(formula, df)
         self.target_cols = self.get_formula_cols(formula, df, target_val=True)
         self.feature_cols = self.get_formula_cols(formula, df, feature_vals=True)
@@ -145,9 +145,10 @@ class Model:
         #self.y, self.X = patsy.dmatrices(formula, self.df)
         self.y =  process.MakeFormula(self.formula, handle_na=self.handle_na,return_X=False,return_y=True, return_type='dataframe').fit_transform(self.df)
         # check transform
-        if all(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y) <= .0001): 
+        transform_test_vals = np.abs(self.y_inverse(self.y_transform(self.y)) - self.y)
+        if transform_test_vals.sum()[0] >=  .00001: 
             print("WARNING!!!! y transform and y_inverse are not correct")
-            print("Average Abs Error",np.mean(np.abs(self.y_inverse(self.y_transform(self.y)) - self.y)) )
+            print("Average Abs Error",np.mean(transform_test_vals ))
 
         self.X = self.df
         if (test_split > 0.0) & (test_split < 1.0):

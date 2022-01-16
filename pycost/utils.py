@@ -116,7 +116,7 @@ class CostTools:
 # %%
 def get_fys(df, FY:str='FY|FiscalYear|Fiscal Year|Fiscal_Year'):
 
-    fys = df.columns.str.replace(FY, "").str.strip().str.isdigit()
+    fys = df.columns.str.replace(FY, "",regex=True).str.strip().str.isdigit()
     return fys
 
 def stack_fys(df, fy_name="FY"):

@@ -4,6 +4,205 @@ import param
 import numbergen as ng
 import scipy.stats
 
+
+import networkx as nx
+class Reactive:
+    '''
+    Base Class to make any Class Object *react* to changes in attributes or chained functions.
+    
+    Algorithm is basic in that it uses a simple heuritistic to determine dependnces
+        1. reads all functions and variables into a list
+        2. For each attribute check if it is in the script of any callables
+            If it is in the script check if it is being assigned
+    
+    overwritten methods:
+    __setattr__ : intervene in 
+    
+    new methods:
+    _build_dependencies(): create directed graph of calculations
+    ShowTree(lib="HV"): draw network of current dependencies
+    
+    new params:
+    __depends__ : list of attributes that are used in a callable
+    __preced__ : list of attributes that are set in a callable
+    
+    Optional:
+    __log__ : if you want to enable logging of changes create a class attribute names "__log__" 
+    
+    
+    Example:
+    
+    class LaborCost(Reactive):
+        
+        def __init__(self, hours,labor_rate):
+            # initialize parameters
+            self.hours = hours 
+            self.labor_rate = labor_rate
+            
+            # full calc
+            self.__call__()
+            
+            # This method builds the model relationships
+            # This method creates two new dunder variables
+                # __depends__
+                # __preced__
+            self._build_dependencies()
+            
+            # Add logging to class
+            # Can be deleted without affecting model and then recreated
+            self.__log__ =[]
+        
+        def __call__(self):
+            self.calc1()
+            self.calc2()
+            
+            return self.labor_cost
+            
+        def calc1(self):
+            self.total_cost = self.hours * self.labor_rate
+        
+        def calc2(self):
+            self.total_cost = self.total_cost * 100
+    
+    '''
+    def __setattr__(self, key,value):
+        
+        self.__preset__(key,value)
+        self.__dict__[key]= value
+        self.__postset__(key)
+    
+    def __preset__(self, key, value):
+        
+        #update
+        try:
+            
+            if value == self.__dict__[key]:
+                pass
+            else:
+                self.__log__.append(
+                    {key:dict(
+                            old=self.__dict__[key],
+                            new=value)
+                    })
+        except:
+            pass
+            #print("First Time", key, "is being set")
+
+    
+    def __postset_batch__(self, keys):
+        pass
+    
+    def __postset__(self,key, batch=False,auto_calc=True):
+        
+        try:
+            for func in self.__dtree__[key]:
+                getattr(self, func)()
+        except:
+            pass
+            #print("dtree not initialized")
+
+    
+    def __call__(self):
+        
+        for key,item in self.__depends__:
+            #print(key)
+            self.__postset__(key)
+        
+        return self
+        
+
+
+    
+    def __build_dtree__(self):
+        import inspect
+        import re
+        ops = ["+", "-", "*", "/", "%", "**", "//"]
+        asgn = ["=","+=", "-=", "*=", "/=", "%=", "//=", "**=", "&=", "|=", "^=", ">>=", "<<="]
+        def check_asgn(var_str, src):
+            for s in asgn:
+                search = str(var_str) +str(s)
+                if search in src:
+                    return True
+            return False
+        
+        attributes = inspect.getmembers(self)
+        scripts = inspect.getmembers(self, lambda a:inspect.isroutine(a))
+        attributes = [a[0] for a in attributes if not(a[0].startswith('__') and a[0].endswith('__'))]
+        scripts = [a for a in scripts if not(a[0].startswith('__') and a[0].endswith('__'))]
+        from collections import defaultdict
+        self.__dtree__ = defaultdict(list)
+        self.__depends__ = []
+        self.__preced__ = []
+        for s in scripts:
+            if s[0] != "_script":
+                src = inspect.getsource(s[1]).replace(" ","")
+                for a in attributes + [s[0] for s in scripts]:
+                    #if "self."+a in re.split('\\+|\\-|\\==|\\*|\n', src):
+                    if "self."+a in src and not check_asgn("self."+a,src):
+                        self.__dtree__[a].append(s[0])
+                        self.__depends__.append((a, s[0]))
+                    elif "self."+a in src or check_asgn("self."+a,src):
+                        self.__preced__.append((s[0],a))
+        
+        # create networkx graph
+        #try:
+        import networkx as nx
+        G = nx.MultiDiGraph()
+        G.add_nodes_from([(s[0], dict(name=s,kind="Func", shape='box',color='blue')) for s in scripts] )
+        G.add_nodes_from([(v, dict(name=v, kind="Var", color='orange')) for v in attributes if v not in G.nodes()])
+        G.add_edges_from(self.__depends__)
+        G.add_edges_from(self.__preced__)
+        self.__G__ = G
+        #except:
+            # networks could not be loaded
+            #pass
+
+
+        
+        
+    def ShowTree(self, lib ='HV'):
+        import networkx as nx
+        import inspect
+        G = self.__G__
+        
+        # reverse graph used to calculate depth of node
+        H = nx.MultiDiGraph()
+        H.add_nodes_from(G)
+        H.add_edges_from([(e[1], e[0]) for e in G.edges])
+        for n in H.nodes():
+            lev = set([val[1] for val in  dict(nx.bfs_predecessors(H, n)).items()])
+            lev = len(lev)
+            G.nodes[n]['depth'] = lev
+        
+        h = {i:0 for i in range(100) }
+        for n in G.nodes():
+            G.nodes[n]['height'] =  h[G.nodes[n]['depth']] *1.5
+            G.nodes[n]['pos'] =  (float(G.nodes[n]['depth']), float(G.nodes[n]['height']))
+            h[G.nodes[n]['depth']] = h[G.nodes[n]['depth']] +1
+        
+        
+        
+        if lib.lower() == 'matplotlib':
+            import matplotlib.pyplot as plt 
+            plt.figure(figsize=(6,6))
+            #pos= [key for key in nx.get_node_attributes(G,'pos').keys()] #  nx.spring_layout(G,scale=2)
+            pos= nx.get_node_attributes(G,'pos') #  nx.spring_layout(G,scale=2)
+            
+            color_map = [G.nodes[g]['color'] for g in G.nodes] 
+            nx.draw(G,pos,node_color=color_map,with_labels=True, node_size=1000,connectionstyle='arc3, rad = 0.1')
+        if lib.lower() == 'hv':
+            import holoviews as hv
+            hv.extension('bokeh')
+            graph = hv.Graph.from_networkx(G, nx.layout.fruchterman_reingold_layout).opts(
+                width=800, height=400,xaxis=None, yaxis=None,legend_position='top_left',
+                directed=True,node_size=50,inspection_policy='edges',arrowhead_length=0.01, node_color='color')
+            labels = hv.Labels(graph.nodes, ['x','y'], 'name')
+            return graph*labels
+
+
+
+
+
 class GlobalInputs(param.Parameterized):
     BY = param.Integer(2020)
     
