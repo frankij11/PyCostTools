@@ -226,10 +226,15 @@ class SimEngine:
     
     
     def run_simulation(self, func=lambda x:1, outputs=None):
-        pass
+        #pass
+        self.simulate=True
+        tmp = pd.DataFrame()
         for i in range(self.trials):
             self.trial=i+1
             func()
+            tmp = tmp.append(outputs)
+        self.simulate=False
+        return tmp
 
     def RV(self, mean=1, cv=.25, median = None, default_value = None, size=1, dist='lognorm', seed=None):
         if seed is None:
