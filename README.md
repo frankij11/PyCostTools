@@ -1,7 +1,7 @@
 # Py Cost Tools
 A suite of tools to help cost estimators
 
-https://mybinder.org/v2/gh/frankij11/PyCostTools/HEAD
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/frankij11/PyCostTools/HEAD)
 
 ## Installation
 * requires a copy of git 
