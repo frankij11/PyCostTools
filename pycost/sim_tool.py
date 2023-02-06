@@ -60,13 +60,14 @@ class RV(float,Real):
             self._factor = mean
             args = (1, cv, None)
 
-
-        x = opt.minimize(find_log, [1,0,1], args=args, method='Nelder-Mead',tol=1e-15, options = {'ftol':1e-15}) #method='SLSQP'
-        if x.success:
-            self.obj = scipy.stats.lognorm(*x.x)
-            self.obj.random_state= np.random.default_rng(seed)
-        else:
-            print("could not find solution:/n", x)
+        self.obj = self._create_rv(mean=mean,median=median,cv=cv)
+        self.obj.random_state= np.random.default_rng(seed)
+        #x = opt.minimize(find_log, [1,0,1], args=args, method='Nelder-Mead',tol=1e-15, options = {'ftol':1e-15}) #method='SLSQP'
+        #if x.success:
+        #    self.obj = scipy.stats.lognorm(*x.x)
+        #    self.obj.random_state= np.random.default_rng(seed)
+        #else:
+        #    print("could not find solution:/n", x)
 
         self._size= size
         self._dist = dist
@@ -79,23 +80,36 @@ class RV(float,Real):
         self.value = self.default_value
         self.rvs = []
 
-
+    def _create_rv(self,mean=None, median=None,cv=None):
+        
+        if median and cv:
+            mu = np.log(median)
+            s2 = np.exp(np.log(1 + cv**2)/2)
+        elif mean and cv:
+            std = mean * cv
+            variance = std**2
+            s2 = np.log(variance/mean**2 + 1)
+            mu = np.log(mean) - s2/2
+        else:
+            pass
+        
+        return scipy.stats.lognorm(scale=np.exp(mu), s = s2**.5)
     def plt(self):
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(1, 2)
         x = np.linspace(self.obj.ppf(0.01), self.obj.ppf(0.99))
-        ax[0].plot(x*self._factor, self.obj.pdf(x),'r-', lw=5, alpha=0.6, label='pdf')
-        ax[1].plot(x*self._factor, self.obj.cdf(x),'k-', lw=5, alpha=0.6, label='cdf')
+        ax[0].plot(x, self.obj.pdf(x),'r-', lw=5, alpha=0.6, label='pdf') # x*self._factor
+        ax[1].plot(x, self.obj.cdf(x),'k-', lw=5, alpha=0.6, label='cdf') # x*self._factor
 
     def get_value(self):
         simulate = self.engine.simulate
         random = self.engine.random
         trial = self.engine.trial
         if random:
-            return self.obj.rvs(size=1)[0] * self._factor
+            return self.obj.rvs(size=1)[0] #* self._factor
         elif simulate:
             if len(self.rvs) <self.engine.trials: self.build_rvs()
-            return self.rvs[trial-1] * self._factor
+            return self.rvs[trial-1] #* self._factor
         else:
             return self.value
 
@@ -235,16 +249,19 @@ class SimEngine:
         self.simulate=False
         return tmp
 
-    def RV(self, mean=1, cv=.25, median = None, default_value = None, size=1, dist='lognorm', seed=None):
+    def RV(self, mean=1, cv=.25, median = None, default_value = None,size=1, dist='lognorm', seed=None):
         if seed is None:
             seed = abs(int(self.seed.normal(1000000,100000,size=1)))
+        
         new_rv = RV( mean, cv, median , default_value, size, dist, seed,engine=self)
+        
         self._variables.append(new_rv)
         return new_rv
 
     @staticmethod
     def correlate(rvs:list, correl_matrix=None, base_correl = .3, method='choleskly'):
         from scipy.linalg import eigh, cholesky
+        data = np.vstack(rvs).T
 
         # Correlation matrix
         if correl_matrix is None:
@@ -255,7 +272,7 @@ class SimEngine:
         if method == 'cholesky':
             # Compute the Cholesky decomposition.
             #c = cholesky(correl_matrix, lower=True)
-            y = SimEngine.induc_correlations(rvs, correl_matrix)
+            y = SimEngine.induce_correlations(data, correl_matrix)
         else:
             # Compute the eigenvalues and eigenvectors.
             evals, evecs = eigh(correl_matrix)
@@ -275,9 +292,11 @@ class SimEngine:
         for rv in objs:
             if len(rv.rvs) == 0: rv.build_rvs() 
         rvs = [rv.rvs for rv in objs]
+        
+         
         new_rvs = SimEngine.correlate(rvs=rvs ,correl_matrix=correl_matrix, base_correl=base_correl,method=method)
         for i, obj in enumerate(objs):
-            obj.rvs = new_rvs[i]
+            obj.rvs = new_rvs[:,i]
             
     @staticmethod
     def induce_correlations(data, corrmat):
@@ -302,6 +321,8 @@ class SimEngine:
 
         """
         # Create an rank-matrix
+        from scipy.stats import rankdata
+        from scipy.stats.distributions import norm
         data_rank = np.vstack([rankdata(datai) for datai in data.T]).T
 
         # Generate van der Waerden scores
@@ -310,7 +331,7 @@ class SimEngine:
 
         # Calculate the lower triangular matrix of the Cholesky decomposition
         # of the desired correlation matrix
-        p = chol(corrmat)
+        p = SimEngine.chol(corrmat)
 
         # Calculate the current correlations
         t = np.corrcoef(data_rank_score, rowvar=0)
