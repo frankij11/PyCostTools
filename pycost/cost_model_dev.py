@@ -8,14 +8,6 @@ class GlobalInputs:
 class BaseModel():
     
     @property
-    def name(self):
-        if hasattr(self, "_name"):
-            return self._name
-        else:
-            self._name = self.__class__.__name__ + '_' + str(id(self))
-            return self._name
-    
-    @property
     def level(self):
         if hasattr(self,"_level"):
             return self._level
@@ -28,9 +20,9 @@ class BaseModel():
         
     @property
     def estimate(self):
-        #check if there has been any changes that require recalculations
+        #todo: check if there has been any changes that require recalculations
                
-        self._estimate =self().assign(**{"Level " + str(self.level): self.name})
+        self._estimate =self().assign(**{"Level " + str(self.level): self.__class__.__name__})
         return self._estimate
     
     def make_report(self):
@@ -76,9 +68,6 @@ class ParentModel(BaseModel):
     def sub_models(self,value):
         self._sub_models = value
     
-    #def make_report(self):
-    #    pass
-        
-        
-    
+    def make_report(self):
+        pass
         

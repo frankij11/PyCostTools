@@ -1,6 +1,11 @@
+# %%
 import pandas as pd
 import numpy as np
 import param
+try:
+    import panel as pn
+except:
+    pass
 import numbergen as ng
 import scipy.stats
 
@@ -112,8 +117,11 @@ class Reactive:
         
 
 
-    
     def __build_dtree__(self):
+        Reactive.build_dtree(self)
+
+    @staticmethod    
+    def build_dtree(self):
         import inspect
         import re
         ops = ["+", "-", "*", "/", "%", "**", "//"]
@@ -153,17 +161,19 @@ class Reactive:
         G.add_edges_from(self.__depends__)
         G.add_edges_from(self.__preced__)
         self.__G__ = G
+        
         #except:
             # networks could not be loaded
             #pass
+        return G
 
 
         
-        
-    def ShowTree(self, lib ='HV'):
+    @staticmethod    
+    def ShowTree(G, lib ='HV'):
         import networkx as nx
         import inspect
-        G = self.__G__
+        #G = self.__G__
         
         # reverse graph used to calculate depth of node
         H = nx.MultiDiGraph()
@@ -185,11 +195,13 @@ class Reactive:
         if lib.lower() == 'matplotlib':
             import matplotlib.pyplot as plt 
             plt.figure(figsize=(6,6))
+            fig, ax = plt.subplots()
             #pos= [key for key in nx.get_node_attributes(G,'pos').keys()] #  nx.spring_layout(G,scale=2)
             pos= nx.get_node_attributes(G,'pos') #  nx.spring_layout(G,scale=2)
             
             color_map = [G.nodes[g]['color'] for g in G.nodes] 
-            nx.draw(G,pos,node_color=color_map,with_labels=True, node_size=1000,connectionstyle='arc3, rad = 0.1')
+            nx.draw(G,pos,node_color=color_map,with_labels=True, node_size=1000,connectionstyle='arc3, rad = 0.1', ax=ax)
+            return fig
         if lib.lower() == 'hv':
             import holoviews as hv
             hv.extension('bokeh')
@@ -204,9 +216,16 @@ class Reactive:
 
 
 class GlobalInputs(param.Parameterized):
-    BY = param.Integer(2020)
-    
+    long_name = param.String("Program X")
+    short_name = param.String("X")
+    base_year = param.Integer(2020, bounds=(1970, 2060))
+    dol_units = param.Selector([1, 1_000, 1_000_000, 1_000_000_000],default = 1_000)
+    required_fields = param.List(['FY','value_cp'])
+    report_fields = param.List(['model','appn', 'FY','value_cp','value_ty', 'value_cy']) 
 
+    @property
+    def BY(self):
+        return self.base_year
 
 class Model(param.Parameterized):
     meta = param.Dict(
@@ -214,54 +233,74 @@ class Model(param.Parameterized):
                   'Element': "N/A",
                   }
     )
-    g_inputs = param.ClassSelector(GlobalInputs, GlobalInputs(), instantiate=False)
+    GlobalInputs = param.ClassSelector(GlobalInputs, GlobalInputs(), instantiate=False)
     u_inputs = param.Dict(
         default= {
             'uncertainty': ng.NormalRandom(mu=1,sigma=.25)
             } )
     uncertainty = param.Number(1)
     simulate = param.Action( lambda self: self.run_simulation(100))
-    results = param.DataFrame(
-        default = pd.DataFrame(columns =['Element','APPN', 'BaseYear', 'FY','Value']),
-        doc = '''Results container shared by all estimates. This value should be updated using the generic _calc method''',
-        columns = set(['Element', 'APPN', 'BaseYear', 'FY','Value']),
-        precedence=.1
-    )
+    results = param.DataFrame()
     sim_results = param.DataFrame(precedence=.1)
-
-
-
-    def __init__(self, **params):
-        super().__init__(**params)
-        # Automatically set results to a calculation given defaults
-        self._calc()
-
-
-    def _calc(self):
-        print(self.name, "Not Implement")
-        self.results = self.results
     
-    @param.depends('results', watch=True)
-    def _update_results(self):
-        self.results['Value'] = self.results['Value'] * self.uncertainty
+    def __call__(self,update=True, **params):
+        if update:
+            self.param.update(**params)
+        else:
+            #store orignial
+            print("temporrary update not implemented yet")
+        return self.cost_estimate
 
 
+    @property
+    def level(self):
+        if hasattr(self,"_level"):
+            return self._level
+        else:
+            self._level = 1
+            return 1
+    @level.setter
+    def level(self,value):
+        self._level = value
+
+
+    def calc_cost(self):
+        print("calc_cost is not implemented error")
+        self.results = pd.DataFrame(columns = self.GlobalInputs.required_fields)
+        return self.results
+    @param.depends('calc_cost','uncertainty', watch=True)
+    def calc_cost_uncertainty(self):
+        
+        self.results['value_cp'] = self.results['value_cp'] * self.uncertainty
+        return self.results
+    
+    
+    @param.depends('calc_cost_uncertainty', watch=True)
+    def calc_cost_estimate(self):
+        #todo: check if there has been any changes that require recalculations
+        self.cost_estimate =self.results.assign(**{"Level " + str(self.level): self.__class__.__name__})
+        return self.cost_estimate
+
+    @param.depends('calc_cost_estimate', watch=True)
+    def calc_schedule_estimate(self):
+        self.schedule_estimate = self.cost_estimate['FY'].min()
+    
     def _prepare_sim(self):
         if self.u_inputs is not None: 
-            self.param.set_param(**self.u_inputs)
+            self.param.update(**self.u_inputs)
         
     def _end_sim(self):
         if self.u_inputs is not None:
             for key,val in self.u_inputs.items():
-                self.param.set_param(**{key: self.param[key].default})
-        self._calc()
+                self.param.update(**{key: self.param[key].default})
+        self.calc_cost_estimate()
     
     def run_simulation(self, trials=100,clear_previous_sim=True, agg_results = True, agg_columns=['APPN', 'FY']):
         self._prepare_sim()
         if clear_previous_sim: self.sim_results =pd.DataFrame()
         for i in range(trials):
             self._prepare_sim()
-            self._calc()
+            self.calc_cost()
             if agg_results:
                 self.sim_results = self.sim_results.append(self.results.groupby(by=agg_columns )['Value'].sum().reset_index().assign(Trial=i))
             else:
@@ -286,110 +325,223 @@ class Model(param.Parameterized):
             except:
                 print("No dashboard apps available. Try downloading panel or ipywidgets")
     
-class Models(Model):
+class ParentModel(Model):
     
     
     models = param.List()
     
-    def _calc(self, run_parallel=False):
+    def calc_cost(self, run_parallel=False):
         results = []
         if run_parallel:
             import multiprocessing
             with multiprocessing.Pool() as pool:
-                pool.map(self._calc_model, range(len(self.models)))
+                pool.map(self.calc_cost_model, range(len(self.models)))
         else:
             
             for model in self.models:
-                model._calc()
+                model.calc_cost()
                 results.append(model.results.assign(ModelType = type(model).__name__))
         
             if len(results) >0: self.results = pd.concat(results, ignore_index=True)
         
-    def _calc_model(self, i):
-        self.models[i]._calc()
+    def calc_cost_model(self, i):
+        self.models[i].calc_cost()
     
     def _add_model(self, model):
         #for new_param in model.param
             #self.
-            #self.param.watch(self._calc, ['a'], queued=True, precedence=2)
+            #self.param.watch(self.calc_cost, ['a'], queued=True, precedence=2)
         self.models.append(model)
-        self._calc()
+        self.calc_cost()
     
     def _prepare_sim(self):
         if self.u_inputs is not None:
-            self.param.set_param(**self.u_inputs)
+            self.param.update(**self.u_inputs)
         for model in self.models:
             model._prepare_sim()
         
     def _end_sim(self):
         if self.u_inputs is not None:
             for key,val in self.u_inputs.items():
-                self.param.set_param(**{key: self.param[key].default})
+                self.param.update(**{key: self.param[key].default})
         
         for model in self.models:
             model._end_sim()
-        self._calc()
+        self.calc_cost()
 
 
-class BaseModel(param.Parameterized):
-    '''
-    Base model for building a cost estimate. Similar to an
-    empty worksheet. All other models should extend this class
-    '''
-    meta= param.Dict(dict(
-        Analyst = param.String("Uknown"),
-        WBS = param.String('Uknown') 
-        ))
+class ModelApp(param.Parameterized):
+    model = param.ClassSelector(Model)
 
-    inputs = GlobalInputs()
-
-    estimate= param.DataFrame(
-        default = pd.DataFrame(columns =["Element", "units","FY", "Value"] ), columns=set(["Element", "units","FY", "Value"]))
-
-    def __init___(self, name, categories, analyst, **kwargs):
-        pass
-
-    def fit(self, **kwargs):
-        '''
-        Implement model
-        '''
-        return self
-
-    def predict(self, inputs=None):
-        '''
-        Implement predict
-        '''
-        # given inputs calcuate estimate
-        if inputs is None: inputs = self.inputs
-        return self.estimate
     
-    def ui(self):
-        '''
-        Generate a worksheet like document to display estimate
-        '''
-        app=None
-        return app
-
-    def simulate(self):
-        '''
-        Implement simulation
-        '''
-        pass
+    @param.depends('model.param')
+    def view_summary(self):
+        data = self.model.cost_estimate.pivot_table(columns = "FY", values = 'value_cp', aggfunc='sum')
+        plt = data.plot(kind='bar')
+        return pn.Column(data,pn.Card(plt, title="Plot", sizing_mode='stretch_width'))
     
-class CostModel(BaseModel):
-    '''
-    Collection of estimates, similar to a workbook in Excel
-    '''
-    inputs = param.Dict()
-    global_inputs = param.Dict(dict(
-        ProgramName = param.String("NA"),
-        BY = param.Integer(2020, bounds=(1970,2060) ),
-        EstimateName= param.String("NA")
-        ))
-    models=param.Dict()
+    @param.depends('model.param')
+    def view_outputs(self):
+        return pn.widgets.Tabulator(self.model.cost_estimate, header_filters=True)
+
+    def view_model(self):
+        
+        inputs = [] 
+        for p in self.model.param:
+            
+            if getattr(getattr(self.model, p, None), "__panel__", None):
+                print(p, 'has panel')
+                inputs.append(getattr(getattr(self.model, p), "__panel__"))
+            else:
+                print(p, 'does not have panel')
+                inputs.append(self.model.param[p])
+        return pn.Column(
+            
+            pn.Card(*inputs, title="Inputs"),
+            pn.Card(self.view_outputs, title = "Outputs", sizing_mode='stretch_width'),
+            sizing_mode='stretch_width'
+        )
+    
+    def view_documentation(self):
+        import inspect
+        []
+        return self.model.__doc__
+    def view_graph(self):
+        import networkx as nx
+        g = Reactive.build_dtree(self.model)
+        self.__G__=g
+        fig = Reactive.ShowTree(g, lib="matplotlib")
+        df=pd.DataFrame.from_records([{"from":e[0], "to":e[1] } for e in g.edges])
+
+        return pn.Row(pn.pane.Matplotlib(fig), df) 
+    def __find_nested_params(self):
+        p_list = []
+        for p in self.model.param:
+            if isinstance(self.model.param[p], param.Parameterized):
+                print("nested param:", p)
+                p_list.append(p)
+        return p_list
+
+    def __panel__(self):
+        summary = pn.layout.FloatPanel(self.view_summary,
+                                       sizing_mode='stretch_both',
+                                       position='center-top',
+                                       offsety=40,
+                                       offsetx=20,
+                                    contained=False,
+                                    name='Summary: ' + self.model.name,
+                                    config = {"headerControls": {"maximize": "remove","close": "remove"}})
+        return pn.Column( 
+            summary,
+            pn.Tabs(('Model', self.view_model), ("CEMM", "CEMM") ,("Documentation", self.view_documentation), ("Graph", self.view_graph), sizing_mode='stretch_width'),
+            sizing_mode='stretch_width'
+        )
+
+
+
+# %%
+class Inventory(param.Parameterized): #pn.viewable.Viewer
+    profile=param.DataFrame(default = pd.DataFrame({'FY':range(2030, 2040), 'quantity' : [5]*5 + [10]*5}))
+    delivery_cycle=param.Integer(2)
+    service_life=param.Integer(20)
+
+    @property
+    def procurement(self):
+        return self.profile
+
+    @property
+    def delivery(self):
+        return self.procurement.FY + self.delivery_cycle
+
+    @property
+    def inventory(self):
+        return self.delivery
+            
+    
+    def __panel__(self):
+        return pn.Card(self.param.profile, title = "Inventory",sizing_mode="stretch_width")        
+# %%
+class Development(Model):
+    cost =param.Number(100)
+    duration = param.Number(5)
+    start_year=param.Number(2020)
+    phased_estimate=pd.DataFrame()
+
+
+    def __call__(self):
+        return self.phased_estimate
+    
+    @property
+    def end_year(self):
+        return self.start_year+self.duration
+
+    @param.depends('start_year','duration', 'cost', watch=True, on_init=True)
+    def calc_cost(self):
+        df = pd.DataFrame(dict(
+            #Model = "Development",
+            FY = range(int(self.start_year), int(self.end_year)),
+            value_cp = [self.cost / self.duration] * (int(self.end_year)- int(self.start_year))
+                              )
+                         )
+        self.results=df
+        return self.results
     
 
-    pass
+class Production(Model):
+    '''
+    # Learning Curve Analysis:
+    This analysis 
+    '''
+    #def __init__(self, T1,LC, RC, Priors = 0, Inventory=Inventory()):
+    T1=param.Number(default=100)
+    LC = param.Number( default=.95, bounds=(.6, 1))
+    RC = param.Number( default=.95, bounds=(.6, 1))
+    Priors = param.Number( default=0)
+    Inventory = param.ClassSelector(Inventory, default = Inventory())
+    
+
+    def __call__(self):
+        return self.lot_cost
+
+    @property
+    def Quantities(self):
+        print(self.Inventory.procurement.head())
+        return self.Inventory.procurement
+
+    @param.depends('T1', 'LC', 'RC', 'Priors', 'Inventory.profile', watch=False)
+    def calc_lot_cost(self):
+        print("T1:", self.T1)
+        df = (self
+              .Inventory.profile.assign(T1= self.T1, LC=self.LC, RC= self.RC, Priors = self.Priors)
+             )
+        df  = (df
+              .assign(
+                  First = lambda x: x.quantity.cumsum().shift(1).fillna(1) + self.Priors, 
+                  Last = lambda x: x.quantity.cumsum()+self.Priors, 
+                  midpoint = lambda x: ((x.First + x.Last) * (x.First*x.Last))**.5 / 4,
+                  auc = lambda x: x.T1 * x.midpoint**(np.log(x.LC)/2) * x.quantity **(np.log(x.RC)/2), 
+                  value_cp = lambda x: x.auc * x.quantity
+              )
+             )
+        self.results = df
+        return self.results
+    
+    @property
+    def lot_cost(self):
+        return self.calc_lot_cost()
+
+    @param.depends('calc_lot_cost')
+    def plot_lot_cost(self):
+        return self.lot_cost.hvplot(x='FY', y='auc')
+
+        
+    
+        
+class Demo_Program(ParentModel):
+    def __init__(self, Inventory=Inventory()):
+        self.Inventory = Inventory
+        self.models = [Development(cost=500, duration=10, start_year=2020), Production(Inventory= self.Inventory)]
+
 
 
 # %%
@@ -418,10 +570,7 @@ class QuantiyInputs(param.Parameterized):
         self.inventory[list(range(2020, 2050))] = np.nan
 
 # %%
-class Development(BaseModel):
-    pass
-
-class EVM(BaseModel):
+class EVM(Model):
     '''
     Structure to develop an EVM estimate
     '''
@@ -454,7 +603,7 @@ class LearningCurve(Model):
         self.results= tmp
 
 
-class Factor(BaseModel):
+class Factor(Model):
     pass
 
 
