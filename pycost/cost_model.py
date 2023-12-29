@@ -302,9 +302,14 @@ class Model(param.Parameterized):
             self._prepare_sim()
             self.calc_cost()
             if agg_results:
-                self.sim_results = self.sim_results.append(self.results.groupby(by=agg_columns )['Value'].sum().reset_index().assign(Trial=i))
+                self.sim_results = pd.concat([self.sim_results,
+                                              self.cost_estimate.groupby(by=agg_columns )['value_cp'].sum().reset_index().assign(Trial=i)]
+                ,ignore_index=True)
             else:
-                self.sim_results = self.sim_results.append(self.results.assign(Trial=i))
+                self.sim_results = pd.concat([self.sim_results,
+                                              self.results.assign(Trial=i)
+                                              ],
+                                              ignore_index=True)
         self._end_sim()
     def run_simulation_parallel(self, trials=100, agg_results=True, agg_columns=['APPN', 'FY']):
         import multiprocessing
