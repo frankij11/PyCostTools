@@ -135,8 +135,8 @@ class Reactive:
         
         attributes = inspect.getmembers(self)
         scripts = inspect.getmembers(self, lambda a:inspect.isroutine(a))
-        attributes = [a[0] for a in attributes if not(a[0].startswith('__') and a[0].endswith('__'))]
-        scripts = [a for a in scripts if not(a[0].startswith('__') and a[0].endswith('__'))]
+        attributes = [a[0] for a in attributes if not(a[0].startswith('_') or a[0].endswith('_'))]
+        scripts = [a for a in scripts if not(a[0].startswith('_') or a[0].endswith('_'))]
         from collections import defaultdict
         self.__dtree__ = defaultdict(list)
         self.__depends__ = []
@@ -156,10 +156,16 @@ class Reactive:
         #try:
         import networkx as nx
         G = nx.MultiDiGraph()
+        
         G.add_nodes_from([(s[0], dict(name=s,kind="Func", shape='box',color='blue')) for s in scripts] )
         G.add_nodes_from([(v, dict(name=v, kind="Var", color='orange')) for v in attributes if v not in G.nodes()])
         G.add_edges_from(self.__depends__)
         G.add_edges_from(self.__preced__)
+        no_edges = nx.isolates(G)
+        G.add_node('start', kind='Var', shape='diamond', color='white')
+        for n in no_edges:
+            G.add_edge("start", n)
+
         self.__G__ = G
         
         #except:
@@ -226,6 +232,9 @@ class GlobalInputs(param.Parameterized):
     @property
     def BY(self):
         return self.base_year
+    
+    def __panel__(self):
+        return pn.Column(self.param)
 
 class Model(param.Parameterized):
     meta = param.Dict(
@@ -240,7 +249,7 @@ class Model(param.Parameterized):
             } )
     uncertainty = param.Number(1)
     simulate = param.Action( lambda self: self.run_simulation(100))
-    results = param.DataFrame()
+    #results = param.DataFrame()
     sim_results = param.DataFrame(precedence=.1)
     
     def __call__(self,update=True, **params):
@@ -268,22 +277,23 @@ class Model(param.Parameterized):
         print("calc_cost is not implemented error")
         self.results = pd.DataFrame(columns = self.GlobalInputs.required_fields)
         return self.results
+    
     @param.depends('calc_cost','uncertainty', watch=True)
     def calc_cost_uncertainty(self):
         
-        self.results['value_cp'] = self.results['value_cp'] * self.uncertainty
-        return self.results
+        self.results_uncertainty = self.results.assign(value_cp= lambda x: x.value_cp * self.uncertainty)
+        return self.results_uncertainty
     
     
     @param.depends('calc_cost_uncertainty', watch=True)
     def calc_cost_estimate(self):
         #todo: check if there has been any changes that require recalculations
-        self.cost_estimate =self.results.assign(**{"Level " + str(self.level): self.__class__.__name__})
+        self.cost_estimate =self.results_uncertainty.assign(**{"Level " + str(self.level): self.__class__.__name__})
         return self.cost_estimate
 
     @param.depends('calc_cost_estimate', watch=True)
     def calc_schedule_estimate(self):
-        self.schedule_estimate = self.cost_estimate['FY'].min()
+        self.schedule_estimate = self.cost_estimate.agg(start_year = ('FY','min'), end_year=('FY', 'max'))
     
     def _prepare_sim(self):
         if self.u_inputs is not None: 
@@ -295,7 +305,7 @@ class Model(param.Parameterized):
                 self.param.update(**{key: self.param[key].default})
         self.calc_cost_estimate()
     
-    def run_simulation(self, trials=100,clear_previous_sim=True, agg_results = True, agg_columns=['APPN', 'FY']):
+    def run_simulation(self, trials=100,clear_previous_sim=True, agg_results = True, agg_columns=[ 'FY']):
         self._prepare_sim()
         if clear_previous_sim: self.sim_results =pd.DataFrame()
         for i in range(trials):
@@ -314,22 +324,7 @@ class Model(param.Parameterized):
     def run_simulation_parallel(self, trials=100, agg_results=True, agg_columns=['APPN', 'FY']):
         import multiprocessing
         with multiprocessing.Pool() as pool:
-            pool.map(self.run_simulation, range(len(self.models)))
-    
-    
-    def build_panel_app(self):
-        self.app = pn.Pane(self)
-        
-    def build_app(self):
-        try:
-            import panel
-            self._build_panel()
-        except:
-            try:
-                import ipywidets
-            except:
-                print("No dashboard apps available. Try downloading panel or ipywidgets")
-    
+            pool.map(self.run_simulation, range(len(self.models)))    
 class ParentModel(Model):
     
     
@@ -379,7 +374,7 @@ class ModelApp(param.Parameterized):
     model = param.ClassSelector(Model)
 
     
-    @param.depends('model.param')
+    @param.depends('model.cost_estimate')
     def view_summary(self):
         data = self.model.cost_estimate.pivot_table(columns = "FY", values = 'value_cp', aggfunc='sum')
         plt = data.plot(kind='bar')
@@ -396,7 +391,11 @@ class ModelApp(param.Parameterized):
             
             if getattr(getattr(self.model, p, None), "__panel__", None):
                 print(p, 'has panel')
-                inputs.append(getattr(getattr(self.model, p), "__panel__"))
+                inputs.append(
+                    pn.Card(
+                        getattr(getattr(self.model, p), "__panel__"),
+                        title=p, collapsed=True)
+                        ) #
             else:
                 print(p, 'does not have panel')
                 inputs.append(self.model.param[p])
@@ -436,6 +435,7 @@ class ModelApp(param.Parameterized):
                                     contained=False,
                                     name='Summary: ' + self.model.name,
                                     config = {"headerControls": {"maximize": "remove","close": "remove"}})
+        
         return pn.Column( 
             summary,
             pn.Tabs(('Model', self.view_model), ("CEMM", "CEMM") ,("Documentation", self.view_documentation), ("Graph", self.view_graph), sizing_mode='stretch_width'),
