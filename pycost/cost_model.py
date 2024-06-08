@@ -372,8 +372,20 @@ class ParentModel(Model):
 
 class ModelApp(param.Parameterized):
     model = param.ClassSelector(Model)
+    models = param.List()
+    model_choice=param.Integer(0)
 
-    
+
+    @param.depends('model','models','model_choice')
+    def view_available_models(self):
+        selector = pn.widgets.Select(name="Choose Model", options = {m.name: i for i,m in enumerate(self.models)},value=self.model_choice)
+        if len(self.models)==0:
+            self.models.append(self.model)
+        self.model = self.models[self.choice]
+
+
+        return pn.Row(selector)
+
     @param.depends('model.cost_estimate')
     def view_summary(self):
         data = self.model.cost_estimate.pivot_table(columns = "FY", values = 'value_cp', aggfunc='sum')
@@ -383,6 +395,7 @@ class ModelApp(param.Parameterized):
     @param.depends('model.param')
     def view_outputs(self):
         return pn.widgets.Tabulator(self.model.cost_estimate, header_filters=True)
+
 
     def view_model(self):
         
@@ -426,6 +439,7 @@ class ModelApp(param.Parameterized):
                 p_list.append(p)
         return p_list
 
+    @param.depends('model')
     def __panel__(self):
         summary = pn.layout.FloatPanel(self.view_summary,
                                        sizing_mode='stretch_both',
@@ -438,6 +452,7 @@ class ModelApp(param.Parameterized):
         
         return pn.Column( 
             summary,
+            self.view_available_models,
             pn.Tabs(('Model', self.view_model), ("CEMM", "CEMM") ,("Documentation", self.view_documentation), ("Graph", self.view_graph), sizing_mode='stretch_width'),
             sizing_mode='stretch_width'
         )

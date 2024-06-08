@@ -1,0 +1,11 @@
+pandas
+numpy
+patsy
+openpyxl
+scikit-learn
+statsmodels
+holoviews
+hvplot
+param
+panel
+networkx

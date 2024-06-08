@@ -1,0 +1,43 @@
+Metadata-Version: 2.1
+Name: PyCostTools-kjoy11
+Version: 0.0.1
+Summary: A suite of tools for helping cost estimators
+Home-page: https://github.com/frankij11/PyCostTools
+Author: Kevin Joy
+Author-email: kevinfjoy@gmail.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: patsy
+Requires-Dist: openpyxl
+Requires-Dist: scikit-learn
+Requires-Dist: statsmodels
+Requires-Dist: holoviews
+Requires-Dist: hvplot
+Requires-Dist: param
+Requires-Dist: panel
+Requires-Dist: networkx
+
+# Py Cost Tools
+A suite of tools to help cost estimators
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/frankij11/PyCostTools/HEAD)
+
+## Installation
+* requires a copy of git 
+* otherwise need to clone / copy to desktop then run setup.py
+```
+pip install git+https://github.com/frankij11/PyCostTools.git#egg=pycost
+```
+
+## Usage
+
+```Python
+import pycost as ct
+ct.inflation.BYtoBY(Index = "APN", FromYR = 2020, ToYR = 2025, Cost = 1)
+```
