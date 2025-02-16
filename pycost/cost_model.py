@@ -381,7 +381,7 @@ class ModelApp(param.Parameterized):
         selector = pn.widgets.Select(name="Choose Model", options = {m.name: i for i,m in enumerate(self.models)},value=self.model_choice)
         if len(self.models)==0:
             self.models.append(self.model)
-        self.model = self.models[self.choice]
+        self.model = self.models[self.model_choice]
 
 
         return pn.Row(selector)
