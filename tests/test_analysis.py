@@ -1,37 +1,41 @@
-# %%
-# import sys, os
-# p = os.path.dirname(__file__)
-# os.chdir(p)
-# os.chdir("../pycost")
-# #p = os.path.dirname(__file__)
-# #print(p)
-# #sys.path.insert(0, p)
+"""
+Tests for analysis module functionality.
+"""
 
-# %%
-import sklego  # .preprocessing.PatsyTransformer as PT
-from pycost.analysis import *
-import pycost as ct
+import unittest
 import pandas as pd
-df = ct.jic
-df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
-f = "Raw ~ Version+Service+tags+Indice +Year"
+import numpy as np
+from pycost import jic
 
-# %%
-m = Model(df, f).fit()
-myModels = Models(df, "Raw ~ Year + tags + Indice",
-                  by=["Version", "Service"], handle_na=False, tags={"JIC": 2019, "Analyst": "Kevin Joy"}).fit()
+class TestAnalysis(unittest.TestCase):
+    """Test cases for analysis module functions."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.df = jic
+        self.df['Year'] = pd.to_numeric(self.df['Year'], errors='coerce')
+    
+    def test_jic_loaded(self):
+        """Test that JIC data is loaded correctly."""
+        self.assertIsInstance(self.df, pd.DataFrame)
+        self.assertIn('Raw', self.df.columns)
+        self.assertIn('Weighted', self.df.columns)
+        self.assertIn('Year', self.df.columns)
+    
+    def test_jic_structure(self):
+        """Test the structure of JIC data."""
+        # Check that key columns exist
+        required_columns = ['Version', 'Service', 'Indice', 'Year', 'Raw', 'Weighted']
+        for col in required_columns:
+            self.assertIn(col, self.df.columns)
+        
+        # Check that there are multiple years
+        years = self.df['Year'].unique()
+        self.assertGreater(len(years), 5)
+        
+        # Check that there are multiple indices
+        indices = self.df['Indice'].unique()
+        self.assertGreater(len(indices), 3)
 
-
-new_df = df.loc[0:2].assign(Year=range(2090, 2093))
-
-#app,server = mods[0].report()
-
-
-# %%
-app = myModels.report(show=False)
-app
-# %%
-
-#p = PT()
-# %%
-# %%
+if __name__ == '__main__':
+    unittest.main()

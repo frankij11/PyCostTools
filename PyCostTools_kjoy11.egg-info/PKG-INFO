@@ -11,33 +11,240 @@ Classifier: Operating System :: OS Independent
 Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE.txt
-Requires-Dist: pandas
-Requires-Dist: numpy
-Requires-Dist: patsy
-Requires-Dist: openpyxl
-Requires-Dist: scikit-learn
-Requires-Dist: statsmodels
-Requires-Dist: holoviews
-Requires-Dist: hvplot
-Requires-Dist: param
-Requires-Dist: panel
-Requires-Dist: networkx
 
-# Py Cost Tools
-A suite of tools to help cost estimators
+# PyCostTools
+
+A comprehensive Python package for cost estimation professionals that follows GAO cost estimating best practices.
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/frankij11/PyCostTools/HEAD)
 
 ## Installation
-* requires a copy of git 
-* otherwise need to clone / copy to desktop then run setup.py
-```
+
+```bash
 pip install git+https://github.com/frankij11/PyCostTools.git#egg=pycost
 ```
 
-## Usage
+## Overview
 
-```Python
-import pycost as ct
-ct.inflation.BYtoBY(Index = "APN", FromYR = 2020, ToYR = 2025, Cost = 1)
+PyCostTools provides two main modules to support cost estimation professionals:
+
+1. **CostModel**: Build reactive cost models with Monte Carlo simulation capabilities
+2. **Analysis**: Perform statistical analysis for cost estimation tasks
+
+## CostModel Module
+
+The CostModel module helps analysts create and manage cost models in Python rather than Excel, with these key features:
+
+- Reactive parameter management using the `param` library
+- Built-in support for inflation and escalation calculations
+- Implementation of GAO cost estimating guide best practices
+- Easy model composition and hierarchy with Base and Parent model classes
+- Shared inputs across models (both deterministic and uncertainty parameters)
+- Automated Monte Carlo simulation
+
+### Example Usage
+
+```python
+from pycost.costmodel import Model, ParentModel
+import param
+import pandas as pd
+
+class Labor(Model):
+    hours = param.Number(200, bounds=(150, 250))
+    labor_rate = param.Number(55, bounds=(50, 60))
+    
+    @param.depends('hours','labor_rate', watch=True)
+    def calc_cost(self):
+        self.cost_estimate = pd.DataFrame(dict(FY=[2023], value_cp = self.hours * self.labor_rate))
+        return self.cost_estimate
+
+class Materials(Model):
+    units = param.Number(10)
+    unit_cost = param.Number(100)
+    
+    @param.depends('units', 'unit_cost', watch=True)
+    def calc_cost(self):
+        self.cost_estimate = pd.DataFrame(dict(FY=[2023], value_cp = self.units * self.unit_cost))
+        return self.cost_estimate
+
+class ProjectEstimate(ParentModel):
+    def __init__(self, **params):
+        # Initialize the models before calling the parent constructor
+        self.models = [
+            Labor(meta={'Element': 'Labor Costs'}),
+            Materials(meta={'Element': 'Material Costs'})
+        ]
+        # Call the parent constructor to set up hierarchy and inheritance
+        super(ProjectEstimate, self).__init__(**params)
+
+# Create and run the model
+project = ProjectEstimate()
+
+# Execute the cost calculation (automatically runs for all submodels)
+project.calc_cost()
+
+# View the combined results (automatically aggregated)
+print(project.cost_estimate)
+
+# Run Monte Carlo simulation
+project.run_simulation(trials=1000)
 ```
+
+### Model Naming Conventions and Automatic Features
+
+PyCostTools implements several automatic features and conventions that simplify cost modeling:
+
+#### Naming Conventions
+
+- **Class Names**: Model classes should use CamelCase (e.g., `Labor`, `Materials`, `ProjectEstimate`)
+- **Parameter Names**: Parameters use snake_case (e.g., `labor_rate`, `unit_cost`)
+- **Method Names**: Methods use snake_case (e.g., `calc_cost`, `run_simulation`)
+- **WBS Elements**: The model automatically creates a Work Breakdown Structure based on class names
+
+#### Automatic Features of Base Model
+
+The `Model` class provides these automatic features:
+
+1. **Reactive Calculations**: When parameters change, dependent calculations automatically update
+2. **Metadata Handling**: The `meta` parameter stores analyst information and other metadata
+3. **Cost Aggregation**: Automatically calculates total costs across fiscal years
+4. **Uncertainty Application**: Applies uncertainty factors to cost estimates
+5. **Column Management**: Ensures consistent columns across all cost estimates
+6. **WBS Level Tracking**: Automatically adds level information to cost estimates
+
+Example of how metadata is added automatically:
+
+```python
+labor = Labor(meta={'Analyst': 'John Doe', 'Element': 'Engineering Labor'})
+labor.calc_cost()
+# Result includes meta_Analyst and meta_Element columns automatically
+```
+
+#### Automatic Features of Parent Model
+
+The `ParentModel` class extends the base Model with:
+
+1. **Hierarchical Structure**: Automatically builds a tree structure of models
+2. **Parent-Child Relationships**: Tracks parent-child relationships in the WBS
+3. **Cost Rollup**: Automatically aggregates costs from all child models
+4. **Inheritance**: Child models inherit global inputs and settings from parent
+5. **Path Management**: Automatically sets and updates parent paths for all children
+6. **Recursive Operations**: Operations like Monte Carlo simulation cascade to all children
+
+Example of automatic hierarchical WBS:
+
+```python
+# Model structure: SystemEstimate > Subsystem > Component
+system = SystemEstimate()
+system.calc_cost()
+
+# Results include "Level 0", "Level 1", "Level 2" columns showing the hierarchy
+# SystemEstimate > Subsystem > Component
+```
+
+## Advanced Features
+
+The framework provides several specialized models for specific estimation needs:
+
+- **Development**: Phase-based development cost estimation
+- **Production**: Manufacturing cost estimation with learning curves
+- **Inventory**: Production scheduling and inventory management
+- **LearningCurve**: Cost improvement analysis for manufacturing
+
+### Hierarchy and WBS Support
+
+Models can be organized hierarchically to reflect a work breakdown structure:
+
+```python
+class SystemEstimate(ParentModel):
+    def __init__(self, **params):
+        self.models = [
+            Development(cost=500, duration=5, start_year=2023),
+            Production(T1=100, LC=0.95),
+            Support(annual_cost=50, duration=10)
+        ]
+        super(SystemEstimate, self).__init__(**params)
+```
+
+### Monte Carlo Simulation
+
+Built-in support for uncertainty analysis using the SimEngine:
+
+```python
+from pycost.cost_estimate.sim_tool import SimEngine
+
+# Create a simulation engine instance with specified seed for reproducibility
+sim_engine = SimEngine(seed=42)
+
+# Set uncertainty parameters using the simulation engine instance
+model.uncertainty_inputs = {
+    'hours': sim_engine.Normal(mean=200, stdev=20),
+    'labor_rate': sim_engine.Normal(mean=55, stdev=5)
+}
+
+# Run simulation
+model.run_simulation(trials=1000)
+
+# Analyze results
+model.sim_results.groupby('FY').value_cp.describe()
+```
+
+#### SimEngine Instance vs. Global Functions
+
+Using a SimEngine instance instead of global functions offers several advantages:
+
+1. **Reproducibility**: Set specific random seeds for consistent results
+2. **Independence**: Create multiple engines with different configurations
+3. **State management**: Each instance maintains its own random state
+4. **Parallelization**: Run multiple independent simulations in parallel
+5. **Control**: Reset or modify simulation parameters between runs
+
+## Analysis Module
+
+The Analysis module automates statistical analysis for cost estimation with:
+
+- Manufacturing cost improvement curves for learning effects
+- Rate effect modeling
+- Support for various regression techniques (Ridge, Lasso, Elastic Net)
+- Non-linear optimization with coefficient constraints
+- Integration with powerful libraries (patsy, scikit-learn, statsmodels)
+
+### Example Usage
+
+```python
+from pycost.analysis import LearningCurve
+
+# Analyze production data to derive learning curve
+lc = LearningCurve(units=[1, 2, 4, 8, 16], 
+                  costs=[100, 90, 81, 73, 66])
+                  
+# Fit learning curve model
+lc.fit()
+print(f"Learning rate: {lc.learning_rate}")
+print(f"First unit cost: {lc.t1_cost}")
+
+# Predict future costs
+future_costs = lc.predict(units=[32, 64, 128])
+```
+
+## Features
+
+- **Reactive Models**: Parameters automatically update dependent calculations
+- **Monte Carlo Simulation**: Built-in uncertainty analysis
+- **WBS Structure**: Hierarchical work breakdown structure support
+- **GAO Compliance**: Follows GAO cost estimating guide best practices
+- **Statistical Analysis**: Tools for regression, optimization, and learning curves
+- **Inflation Handling**: Automated inflation and escalation calculations
+- **Interactive UI**: Optional Panel-based user interface for model exploration
+
+## Documentation
+
+For full documentation and tutorials, visit [documentation link].
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the [License Name] - see the LICENSE file for details.
