@@ -1,0 +1,37 @@
+include README.md
+include LICENSE.txt
+include CHANGES.md
+include CONTRIBUTING.md
+include requirements.txt
+include requirements-dev.txt
+include pyproject.toml
+include setup.py
+
+# Include package data
+recursive-include pycost/data *
+recursive-include pycost *.py
+recursive-include pycost py.typed
+
+# Include tests but not in wheel
+recursive-include tests *.py
+
+# Include examples
+recursive-include examples *.py
+recursive-include examples *.ipynb
+
+# Exclude unnecessary files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude .env *
+recursive-exclude venv *
+recursive-exclude .venv *
+recursive-exclude build *
+recursive-exclude dist *
+recursive-exclude *.egg-info * 

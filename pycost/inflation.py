@@ -476,5 +476,124 @@ if __name__ == "__main__":
     infl_2025.to_excel("infl_2025_wide_nonstack.xlsx", long=False, stack=False)
     infl_2025.to_excel("infl_2025_wide_nonstack_period.xlsx", long=False, stack=False, period_start=2025, period_end=2030)
 
+# Create a default inflation instance for convenience functions
+_default_inflation = Inflation()
+
+def BYtoBY(index, from_year, to_year, value, inflation_table=None):
+    """
+    Convert costs from one base year to another base year.
+    
+    Parameters
+    ----------
+    index : str
+        Inflation index to use (e.g., 'RDT&E', 'PROC', 'APN')
+    from_year : int or str
+        Source base year
+    to_year : int or str
+        Target base year
+    value : float
+        Cost value to convert
+    inflation_table : pandas.DataFrame, optional
+        Custom inflation table. If None, uses default.
+        
+    Returns
+    -------
+    float
+        Converted cost value
+    """
+    if inflation_table is not None:
+        infl = Inflation(inflation_table)
+    else:
+        infl = _default_inflation
+    
+    return infl.CYtoCY(int(from_year), int(to_year), index, value)
+
+def BYtoTY(index, from_year, to_year, value, inflation_table=None):
+    """
+    Convert costs from base year to then year.
+    
+    Parameters
+    ----------
+    index : str
+        Inflation index to use (e.g., 'RDT&E', 'PROC', 'APN')
+    from_year : int or str
+        Source base year
+    to_year : int or str
+        Target then year
+    value : float
+        Cost value to convert
+    inflation_table : pandas.DataFrame, optional
+        Custom inflation table. If None, uses default.
+        
+    Returns
+    -------
+    float
+        Converted cost value
+    """
+    if inflation_table is not None:
+        infl = Inflation(inflation_table)
+    else:
+        infl = _default_inflation
+    
+    return infl.CYtoTY(int(from_year), int(to_year), index, value)
+
+def TYtoBY(index, from_year, to_year, value, inflation_table=None):
+    """
+    Convert costs from then year to base year.
+    
+    Parameters
+    ----------
+    index : str
+        Inflation index to use (e.g., 'RDT&E', 'PROC', 'APN')
+    from_year : int or str
+        Source then year
+    to_year : int or str
+        Target base year
+    value : float
+        Cost value to convert
+    inflation_table : pandas.DataFrame, optional
+        Custom inflation table. If None, uses default.
+        
+    Returns
+    -------
+    float
+        Converted cost value
+    """
+    if inflation_table is not None:
+        infl = Inflation(inflation_table)
+    else:
+        infl = _default_inflation
+    
+    return infl.TYtoCY(int(from_year), int(to_year), index, value)
+
+def TYtoTY(index, from_year, to_year, value, inflation_table=None):
+    """
+    Convert costs from one then year to another then year.
+    
+    Parameters
+    ----------
+    index : str
+        Inflation index to use (e.g., 'RDT&E', 'PROC', 'APN')
+    from_year : int or str
+        Source then year
+    to_year : int or str
+        Target then year
+    value : float
+        Cost value to convert
+    inflation_table : pandas.DataFrame, optional
+        Custom inflation table. If None, uses default.
+        
+    Returns
+    -------
+    float
+        Converted cost value
+    """
+    if inflation_table is not None:
+        infl = Inflation(inflation_table)
+    else:
+        infl = _default_inflation
+    
+    return infl.TYtoTY(int(from_year), int(to_year), index, value)
+
 
     

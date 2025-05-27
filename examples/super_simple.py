@@ -1,38 +1,69 @@
-from pycost.cost.core.base import Model
-import param
+"""
+Super simple example for the PyCost framework.
+
+This example demonstrates the most basic usage of PyCost utilities.
+"""
+
 import pandas as pd
+import numpy as np
 
-class Labor(Model):
-    """
-    A simple model with a single parameter.
-    """
-    hours = param.Number(default=1, bounds=(0, 10))
-    rate = param.Number(default=1, bounds=(0, 10))
+# Import basic utilities
+from pycost import utils, learn
+
+def main():
+    """Run a super simple example."""
+    print("PyCost Super Simple Example")
+    print("=" * 40)
     
-    @param.depends('hours', 'rate')
-    def calc_cost(self):
-        self.cost_estimate = pd.DataFrame({'hours': [self.hours], 'rate': [self.rate], 'value_cp': [self.hours * self.rate]})
-        return self.cost_estimate
+    # Example 1: Learning curve calculations
+    print("\n1. Learning Curve Calculations:")
+    first_unit_cost = 100
+    learning_curve = 0.9
+    rate_curve = 0.95
+    quantity = 10
+    rate = 2
     
+    total_cost = learn.learn_curve(first_unit_cost, learning_curve, rate_curve, quantity, rate)
+    print(f"   Total cost for {quantity} units: ${total_cost:.2f}")
+    
+    # Calculate midpoint using lc_midpoint (which works)
+    midpoint = learn.lc_midpoint(1, 10, 0.9)
+    print(f"   Midpoint unit for 1-10 with 90% learning: {midpoint:.2f}")
+    
+    # Example 2: DataFrame utilities
+    print("\n2. DataFrame Utilities:")
+    df = pd.DataFrame({
+        'Project': ['A', 'B', 'C'],
+        'FY2020': [100, 200, 150],
+        'FY2021': [110, 220, 165],
+        'FY2022': [120, 240, 180]
+    })
+    
+    print("   Original DataFrame:")
+    print(df.to_string(index=False))
+    
+    # Use PyCost DataFrame extensions
+    fy_columns = df.ct.contains('FY')
+    print(f"\n   Fiscal year columns: {fy_columns}")
+    
+    # Stack fiscal years
+    stacked = df.ct.stack_fys()
+    print("\n   Stacked format:")
+    print(stacked.head().to_string(index=False))
+    
+    # Example 3: More learning curve calculations
+    print("\n3. More Learning Curve Examples:")
+    
+    # Different learning curves
+    learning_curves = [0.8, 0.85, 0.9, 0.95]
+    for lc in learning_curves:
+        cost = learn.learn_curve(100, lc, 1.0, 10, 1)
+        print(f"   {int(lc*100)}% learning curve: ${cost:.2f}")
+    
+    print("\nSUCCESS: Super simple example completed successfully!")
 
-if __name__ == '__main__':
-    labor = Labor()
-    from pycost.cost.utils.reactive import Reactive, build_param_dependency_graph, display_param_dependency_graph
-    import networkx as nx
-    G = Reactive.build_dtree(labor)
-    print(G)
-    G=build_param_dependency_graph(labor)
-    display_param_dependency_graph(G)
-
-    # determine if there is a cycle in the dependency tree
-    if nx.is_directed_acyclic_graph(G):
-        print("No cycles in the dependency tree")
-    else:
-        print("There is a cycle in the dependency tree")
-    # determine if there is a cycle in param.depends
-
-
-    #print(check_param_cycles(labor))
+if __name__ == "__main__":
+    main()
 
 
     
