@@ -49,6 +49,7 @@ Please follow these guidelines for code style:
 - Add docstrings for all functions, classes, and methods
 - Use type hints where appropriate
 - Keep lines under 100 characters
+- Consider using `black` for code formatting, `flake8` for linting, and `mypy` for type checking to maintain code quality and consistency. Configuration files for these tools may be added to the project.
 
 ## Submitting Changes
 

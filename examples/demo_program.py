@@ -9,6 +9,9 @@ import logging
 from typing import Optional
 import pandas as pd
 
+# from pycost.cost.utils.logging import setup_logging
+# setup_logging(log_level=logging.INFO) # Alternative to basicConfig
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

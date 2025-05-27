@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+backend-path = "."
+
+[tool.black]
+line-length = 88
+target-version = ['py36'] # Or the minimum Python version supported
+# include = '\.pyi?$'
+# exclude = '''
+# /(
+#     \.eggs
+#   | \.git
+#   | \.hg
+#   | \.mypy_cache
+#   | \.tox
+#   | \.venv
+#   | _build
+#   | buck-out
+#   | build
+#   | dist
+# )/
+# '''

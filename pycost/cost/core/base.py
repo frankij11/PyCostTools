@@ -22,10 +22,6 @@ from pycost.cost.utils.sim_tool import SimEngine, RVLognormal
 from pycost.cost.utils.reactive import build_param_dependency_graph, check_param_cycles
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 # Create sim_engine later when needed
@@ -249,7 +245,8 @@ class Model(param.Parameterized): #
     @property
     def total_cost_cp(self) -> float:
         """
-        Get the total cost in constant price.
+        Get the total cost in constant price (CP) dollars.
+        Constant price dollars are tied to the global_inputs.base_year.
         """
         if self._total_cost_cp:
             return self._total_cost_cp
@@ -266,7 +263,8 @@ class Model(param.Parameterized): #
     @property
     def total_cost_ty(self) -> float:
         """
-        Get the total cost in then-year.
+        Get the total cost in then-year (TY) dollars.
+        Then-year dollars include estimated inflation for future years.
         """
         if self._total_cost_ty:
             return self._total_cost_ty
@@ -283,7 +281,8 @@ class Model(param.Parameterized): #
     @property
     def total_cost_cy(self) -> float:
         """
-        Get the total cost in current year.
+        Get the total cost in current year (CY) dollars.
+        Current year dollars are typically then-year dollars escalated to the current date.
         """
         if self._total_cost_cy:
             return self._total_cost_cy

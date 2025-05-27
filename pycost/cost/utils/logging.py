@@ -22,22 +22,26 @@ def setup_logging(log_level=logging.INFO, log_file=None):
     if logger.handlers:
         logger.handlers = []
     
-    # Create formatters and handlers - add filename and line number to format
-    formatter = logging.Formatter(
+    # Create formatters and handlers
+    detailed_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
     # File handler if specified
     if log_file:
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
+        file_handler.setFormatter(detailed_formatter)
         logger.addHandler(file_handler)
     
     return logger 

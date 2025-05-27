@@ -4,105 +4,117 @@ This document outlines tasks to improve the PyCostTools package by fixing bugs, 
 
 ## Code Structure and Organization
 
-- [ ] Reorganize package structure to follow modern Python conventions
-  - [ ] Implement proper `__init__.py` files for module exports
-  - [ ] Set up proper namespace hierarchy
-  - [ ] Create separate modules for related functionality
+- [ ] [Medium] Reorganize package structure to follow modern Python conventions
+  - [ ] [Medium] Implement proper `__init__.py` files for module exports
+  - [ ] [Medium] Set up proper namespace hierarchy
+  - [ ] [Medium] Create separate modules for related functionality
 
-- [ ] Documentation improvements
-  - [ ] Add type hints throughout the codebase
-  - [ ] Complete docstrings for all classes and methods
-  - [ ] Generate API documentation using Sphinx
+- [ ] [High] Documentation improvements
+  - [ ] [Medium] Add type hints throughout the codebase
+  - [ ] [High] Complete docstrings for all classes and methods
+  - [ ] [Medium] Generate API documentation using Sphinx
 
 ## Bug Fixes
 
-- [ ] Fix inflation and escalation calculations (currently placeholders)
-  - [ ] Implement proper inflation conversion in `calc_cost_metadata`
-  - [ ] Add proper conversion between cost and calendar year dollars
+- [ ] [High] Fix inflation and escalation calculations (currently placeholders)
+  - [ ] [High] Implement proper inflation conversion in `calc_cost_metadata`
+  - [ ] [High] Add proper conversion between cost and calendar year dollars
 
-- [ ] Address issues in Monte Carlo simulation
-  - [ ] Fix `_end_sim` method to properly reset parameters
-  - [ ] Fix `calc_cost_estimate` reference (doesn't exist)
-  - [ ] Replace numbergen (ng) dependency with built-in SimEngine
-      - [ ] Update Model class to use SimEngine instance rather than global functions
-      - [ ] Implement seed management for reproducible simulations
-      - [ ] Add ability to create and manage multiple simulation engines
-      - [ ] Ensure consistent distribution parameter naming (mu/sigma vs mean/stdev)
-      - [ ] Update documentation and examples
+- [ ] [High] Address issues in Monte Carlo simulation
+  - [ ] [High] Fix `_end_sim` method to properly reset parameters
+  - [ ] [High] Fix `calc_cost_estimate` reference (doesn't exist)
+  - [ ] [High] Replace numbergen (ng) dependency with built-in SimEngine
+      - [ ] [High] Update Model class to use SimEngine instance rather than global functions
+      - [ ] [High] Implement seed management for reproducible simulations
+      - [ ] [Medium] Add ability to create and manage multiple simulation engines
+      - [ ] [Medium] Ensure consistent distribution parameter naming (mu/sigma vs mean/stdev)
+      - [ ] [Medium] Update documentation and examples
 
-- [ ] Resolve DataFrame handling issues
-  - [ ] Fix column type/name inconsistencies (e.g., lowercase vs. uppercase column names)
-  - [ ] Ensure consistent column naming across models
-  - [ ] Fix usage of 'FY' vs 'fy' columns in scheduling calculations
+- [ ] [High] Resolve DataFrame handling issues
+  - [ ] [High] Fix column type/name inconsistencies (e.g., lowercase vs. uppercase column names)
+  - [ ] [High] Ensure consistent column naming across models
+  - [ ] [High] Fix usage of 'FY' vs 'fy' columns in scheduling calculations
 
-- [ ] Fix error handling and validation
-  - [ ] Add proper validation for required fields
-  - [ ] Add defensive checks before operations on potentially empty DataFrames
+- [ ] [High] Fix error handling and validation
+  - [ ] [High] Add proper validation for required fields
+  - [ ] [High] Add defensive checks before operations on potentially empty DataFrames
 
 ## Refactoring
 
-- [ ] Implement PEP 8 compliance
-  - [ ] Fix variable naming to follow snake_case convention
-  - [ ] Reduce line lengths to 79-88 characters
-  - [ ] Fix import order and grouping
+- [ ] [High] Implement PEP 8 compliance
+  - [ ] [High] Fix variable naming to follow snake_case convention
+  - [ ] [Medium] Reduce line lengths to 79-88 characters
+  - [ ] [Medium] Fix import order and grouping
 
-- [ ] Improve code modularity
-  - [ ] Extract common functionality into utility functions
-  - [ ] Decouple UI components from model logic
-  - [ ] Break up large classes into smaller, focused classes
+- [ ] [Medium] Improve code modularity
+  - [ ] [Medium] Extract common functionality into utility functions
+  - [ ] [Medium] Decouple UI components from model logic
+  - [ ] [Medium] Break up large classes into smaller, focused classes
 
-- [ ] Performance improvements
-  - [ ] Optimize DataFrame operations to reduce copy operations
-  - [ ] Improve parallelization in Monte Carlo simulation
-  - [ ] Use vectorized operations where possible
+- [ ] [Medium] Performance improvements
+  - [ ] [Medium] Optimize DataFrame operations to reduce copy operations
+  - [ ] [Medium] Improve parallelization in Monte Carlo simulation
+  - [ ] [Medium] Use vectorized operations where possible
 
-- [ ] Simplify model interface
-  - [ ] Standardize parameter management across model types
-  - [ ] Create consistent API for all model types
-  - [ ] Implement interface templates/protocols for different model types
+- [ ] [Medium] Simplify model interface
+  - [ ] [Medium] Standardize parameter management across model types
+  - [ ] [Medium] Create consistent API for all model types
+  - [ ] [Medium] Implement interface templates/protocols for different model types
 
 ## Feature Implementation
 
-- [ ] Complete the Analysis module
-  - [ ] Implement regression analysis capabilities
-  - [ ] Add learning curve analysis functionalities
-  - [ ] Add optimization tools for parameter fitting
+- [ ] [Medium] Complete the Analysis module
+  - [ ] [Medium] Implement regression analysis capabilities
+  - [ ] [Medium] Add learning curve analysis functionalities
+  - [ ] [Medium] Add optimization tools for parameter fitting
 
-- [ ] Enhance the CostModel module
-  - [ ] Add support for advanced WBS management
-  - [ ] Implement better uncertainty distribution models
-  - [ ] Add time-phasing capabilities
+- [ ] [Medium] Enhance the CostModel module
+  - [ ] [Medium] Add support for advanced WBS management
+  - [ ] [Medium] Implement better uncertainty distribution models
+  - [ ] [Low] Add time-phasing capabilities
 
-- [ ] Add validation and quality assurance tools
-  - [ ] Implement model validation checks
-  - [ ] Add data quality assessment tools
-  - [ ] Create model comparison utilities
+- [ ] [Low] Add validation and quality assurance tools
+  - [ ] [Low] Implement model validation checks
+  - [ ] [Low] Add data quality assessment tools
+  - [ ] [Low] Create model comparison utilities
 
-- [ ] Create visualization and reporting tools
-  - [ ] Standard cost report generators
-  - [ ] Interactive dashboards for model analysis
-  - [ ] Export capabilities for reports and presentations
+- [ ] [Low] Create visualization and reporting tools
+  - [ ] [Low] Standard cost report generators
+  - [ ] [Low] Interactive dashboards for model analysis
+  - [ ] [Low] Export capabilities for reports and presentations
 
 ## Testing
 
-- [ ] Set up comprehensive test suite
-  - [ ] Unit tests for core functionality
-  - [ ] Integration tests for model interactions
-  - [ ] Regression tests for known bugs
+- [ ] [High] Set up comprehensive test suite
+  - [ ] [High] Unit tests for core functionality
+  - [ ] [Medium] Integration tests for model interactions
+  - [ ] [Medium] Regression tests for known bugs
 
-- [ ] Set up CI/CD pipeline
-  - [ ] Automated testing on pushes/PRs
-  - [ ] Automated linting and style checking
-  - [ ] Package building and publishing workflows
+- [ ] [High] Set up CI/CD pipeline
+  - [ ] [High] Automated testing on pushes/PRs
+  - [ ] [High] Automated linting and style checking
+  - [ ] [Medium] Package building and publishing workflows
+
+## Release Preparation and Review
+- [ ] [High] Finalize and verify `LICENSE.txt` details (e.g., copyright holder, year). (Self-note: This was mostly done, but good to keep as a checklist item for releases).
+- [ ] [Medium] Ensure consistent logging practices throughout the library:
+    - [ ] [Medium] Verify all modules use `logging.getLogger(__name__)`.
+    - [ ] [Medium] Ensure users are guided on how to configure logging via library functions or `basicConfig` for their application. (Self-note: Partly done, this is for a final review).
 
 ## User Experience
 
-- [ ] Create example notebooks and tutorials
-  - [ ] Basic model building examples
-  - [ ] Advanced analysis examples
-  - [ ] Real-world case studies
+- [ ] [Medium] Create example notebooks and tutorials
+  - [ ] [Medium] Basic model building examples
+  - [ ] [Medium] Advanced analysis examples
+  - [ ] [Low] Real-world case studies
 
-- [ ] Update documentation
-  - [ ] User guide
-  - [ ] API reference
-  - [ ] Best practices guide 
+- [ ] [Medium] Update documentation
+  - [ ] [Medium] User guide
+  - [ ] [High] API reference
+  - [ ] [Medium] Best practices guide 
+
+## Notebooks
+- [ ] [Medium] Review and update Jupyter Notebooks (.ipynb files) in the 'nb/' directory:
+    - [ ] [Medium] Remove or replace `warnings.filterwarnings('ignore')`.
+    - [ ] [Medium] Ensure notebooks run correctly with the latest code.
+    - [ ] [Medium] Align notebook code with library's best practices (e.g., logging).

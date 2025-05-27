@@ -9,7 +9,6 @@ import seaborn as sns
 from tqdm import tqdm
 import time
 import warnings
-warnings.filterwarnings('ignore')
 
 from pycost.analysis.constrained.constrained_model import ConstrainedRegression, ConstrainedRegressionCV
 

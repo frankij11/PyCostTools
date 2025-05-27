@@ -3,7 +3,9 @@ import numpy as np
 from pycost.learn import lc_prep, lc
 
 import warnings
-warnings.filterwarnings('ignore')
+# To manage warnings, use the 'warnings' module. For example, to see warnings once:
+# import warnings
+# warnings.simplefilter('once') # Other options: 'default', 'error', 'always', etc.
 
 # Create manufacturing lot data for 8 lots with columns:
 # - Lot Type (EMD, LRIP, FRP)

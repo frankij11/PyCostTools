@@ -1,0 +1,19 @@
+[flake8]
+# Max line length, same as black for consistency
+max-line-length = 88
+# Errors/warnings to ignore (if any, add them here)
+# Example: ignore = E203, E266, E501, W503, F401
+# For now, keep it simple. Add specific ignores as needed.
+# Default ignores: E121, E123, E126, E226, E24, E704, W503, W504 (for newer flake8)
+# Recommended to extend default excludes for project-specific dirs if any
+exclude =
+    .git,
+    __pycache__,
+    docs/conf.py,
+    build,
+    dist,
+    .eggs,
+    *.egg-info,
+    .tox,
+    .venv,
+    .vscode

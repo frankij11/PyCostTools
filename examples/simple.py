@@ -7,6 +7,9 @@ This example demonstrates the basic usage of cost estimation models.
 import pandas as pd
 import logging
 
+# from pycost.cost.utils.logging import setup_logging
+# setup_logging(log_level=logging.INFO) # Alternative to basicConfig
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
